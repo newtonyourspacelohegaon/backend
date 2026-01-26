@@ -22,6 +22,7 @@ const postRoutes = require('./routes/postRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const uploadRoutes = require('./routes/upload');
 const storyRoutes = require('./routes/storyRoutes');
+const updateRoutes = require('./routes/updateRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -30,6 +31,7 @@ app.use('/api/posts', postRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/stories', storyRoutes);
+app.use('/api/update', updateRoutes);
 
 // Database Connection
 mongoose

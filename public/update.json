@@ -1,0 +1,9 @@
+{
+  "android": {
+    "latestVersionCode": 2,
+    "latestVersionName": "1.0.1",
+    "forceUpdate": false,
+    "apkUrl": "https://firebasestorage.googleapis.com/v0/b/your-project/o/releases%2Fapp_v1.0.1.apk?alt=media",
+    "releaseNotes": "Initial release with dating mode, stories, and events features."
+  }
+}
