@@ -120,12 +120,16 @@ exports.toggleLike = async (req, res) => {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
+    // Convert ObjectIds to strings for proper comparison
+    const likeIds = post.likes.map(id => id.toString());
+    const userId = req.user.id.toString();
+
     // Check if post has already been liked by this user
-    if (post.likes.includes(req.user.id)) {
-      // Unlike
-      post.likes = post.likes.filter(id => id.toString() !== req.user.id);
+    if (likeIds.includes(userId)) {
+      // Unlike - remove user from likes array
+      post.likes = post.likes.filter(id => id.toString() !== userId);
     } else {
-      // Like
+      // Like - add user to likes array
       post.likes.push(req.user.id);
     }
 

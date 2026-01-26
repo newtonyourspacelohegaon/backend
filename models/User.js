@@ -43,6 +43,35 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  
+  // Dating Mode Profile Fields
+  datingTermsAccepted: {
+    type: Boolean,
+    default: false,
+  },
+  datingTermsAcceptedAt: Date,
+  datingProfileComplete: {
+    type: Boolean,
+    default: false,
+  },
+  datingGender: {
+    type: String,
+    enum: ['Man', 'Woman', 'Non-binary'],
+  },
+  datingLookingFor: {
+    type: String,
+    enum: ['Women', 'Men', 'Everyone'],
+  },
+  datingAge: Number,
+  datingHeight: String,
+  datingHometown: String,
+  datingCollege: String,
+  datingCourse: String,
+  datingIntentions: [String], // ['Long-term relationship', 'Casual dating', etc.]
+  datingBio: String,
+  datingInterests: [String],
+  datingPhotos: [String], // Array of photo URLs
+  
   createdAt: {
     type: Date,
     default: Date.now,
@@ -50,3 +79,4 @@ const userSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('User', userSchema);
+
