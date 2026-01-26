@@ -17,6 +17,7 @@ exports.getMe = async (req, res) => {
     
     res.json(userData);
   } catch (error) {
+    console.error('getMe error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -142,15 +143,54 @@ exports.updateProfile = async (req, res) => {
     user.year = year || user.year;
     user.major = major || user.major;
     user.interests = interests || user.interests;
-    user.profileImage = profileImage || user.profileImage;
-    user.fullName = req.body.fullName || user.fullName;
-    user.isVerified = true; 
+
+    if (profileImage) {
+        user.profileImage = profileImage;
+    }
 
     await user.save();
-
-    res.json({ success: true, user });
+    res.json(user);
   } catch (error) {
-    console.error(error);
+    console.error('Update profile error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// @desc    Block User
+// @route   POST /api/users/:id/block
+exports.blockUser = async (req, res) => {
+  try {
+    const userIdToBlock = req.params.id;
+    const currentUser = await User.findById(req.user.id);
+
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (currentUser.blockedUsers.includes(userIdToBlock)) {
+      return res.status(400).json({ message: 'User already blocked' });
+    }
+
+    currentUser.blockedUsers.push(userIdToBlock);
+    
+    // Also unfollow if blocked
+    if (currentUser.following.includes(userIdToBlock)) {
+      currentUser.following = currentUser.following.filter(id => id.toString() !== userIdToBlock);
+    }
+
+    // Remove from followers if they follow you
+    const blockedUser = await User.findById(userIdToBlock);
+    if (blockedUser && blockedUser.following.includes(req.user.id)) {
+      blockedUser.following = blockedUser.following.filter(id => id.toString() !== req.user.id);
+      await blockedUser.save();
+    }
+
+    await currentUser.save();
+
+    res.json({ message: 'User blocked successfully' });
+  } catch (error) {
+    console.error('Block user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+

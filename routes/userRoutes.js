@@ -9,5 +9,6 @@ router.post('/check-username', checkUsername);
 router.get('/search', protect, searchUsers);
 router.get('/:id', protect, getUserById);
 router.post('/:id/follow', protect, followUser);
+router.post('/:id/block', protect, require('../controllers/userController').blockUser);
 
 module.exports = router;

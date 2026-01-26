@@ -1,15 +1,34 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 
-// @desc    Get Feed Posts
-// @route   GET /api/posts
+// @desc    Get Feed Posts (with pagination)
+// @route   GET /api/posts?page=1&limit=10
 exports.getPosts = async (req, res) => {
   try {
-    const posts = await Post.find()
-      .populate('user', 'username fullName profileImage isVerified') // Get author details
-      .sort({ createdAt: -1 }); // Newest first
-    res.json(posts);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const posts = await Post.find({
+      user: { $nin: req.user.blockedUsers }
+    })
+      .populate('user', 'username fullName profileImage isVerified college followers')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit + 1); // Get one extra to check if more exist
+
+    // Check if there are more posts
+    const hasMore = posts.length > limit;
+    const postsToReturn = hasMore ? posts.slice(0, limit) : posts;
+
+    res.json({
+      posts: postsToReturn,
+      hasMore,
+      page,
+      limit
+    });
   } catch (error) {
+    console.error('Get Posts Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -113,6 +132,7 @@ exports.toggleLike = async (req, res) => {
     await post.save();
     res.json(post.likes);
   } catch (error) {
+    console.error('Toggle Like Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

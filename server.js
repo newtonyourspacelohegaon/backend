@@ -20,12 +20,16 @@ const userRoutes = require('./routes/userRoutes');
 const datingRoutes = require('./routes/datingRoutes');
 const postRoutes = require('./routes/postRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const uploadRoutes = require('./routes/upload');
+const storyRoutes = require('./routes/storyRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dating', datingRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/stories', storyRoutes);
 
 // Database Connection
 mongoose

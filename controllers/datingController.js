@@ -15,6 +15,7 @@ exports.getRecommendations = async (req, res) => {
 
     res.json(recommendations);
   } catch (error) {
+    console.error('getRecommendations error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -37,6 +38,7 @@ exports.switchMatch = async (req, res) => {
 
     res.json({ success: true, coins: user.coins, message: 'Vibe switched successfully!' });
   } catch (error) {
+    console.error('switchMatch error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -57,6 +59,7 @@ exports.buyCoins = async (req, res) => {
 
     res.json({ success: true, coins: user.coins, message: `Added ${amount} coins!` });
   } catch (error) {
+    console.error('buyCoins error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
