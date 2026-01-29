@@ -126,7 +126,7 @@ exports.checkUsername = async (req, res) => {
 // @route   PATCH /api/users/profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { username, fullName, bio, college, year, major, interests, profileImage } = req.body;
+    const { username, fullName, age, bio, college, year, major, interests, profileImage } = req.body;
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -139,6 +139,14 @@ exports.updateProfile = async (req, res) => {
     }
 
     user.fullName = fullName || user.fullName;
+
+    // Age can only be set once (immutable after first set)
+    if (age && !user.age) {
+      user.age = age;
+      // Also sync to dating profile
+      user.datingAge = age;
+    }
+
     user.bio = bio || user.bio;
     user.college = college || user.college;
     user.year = year || user.year;
@@ -195,3 +203,22 @@ exports.blockUser = async (req, res) => {
   }
 };
 
+
+// @desc    Get All Users (Admin Only)
+// @route   GET /api/users/admin/all
+exports.getAllUsers = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    // Simple check: In production, use robust role management.
+    // For now, checks the isAdmin flag we just added.
+    if (!user || (!user.isAdmin)) {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+
+    const users = await User.find({}).sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    console.error('getAllUsers error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};

@@ -11,4 +11,7 @@ router.get('/:id', protect, getUserById);
 router.post('/:id/follow', protect, followUser);
 router.post('/:id/block', protect, require('../controllers/userController').blockUser);
 
+// Admin Route
+router.get('/admin/all', protect, require('../controllers/userController').getAllUsers);
+
 module.exports = router;

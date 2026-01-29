@@ -10,28 +10,39 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' })); 
+app.use(cors({
+  origin: true, // Reflect request origin to support credentials
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const datingRoutes = require('./routes/datingRoutes');
+const blindDatingRoutes = require('./routes/blindDatingRoutes');
+const likesRoutes = require('./routes/likesRoutes');
 const postRoutes = require('./routes/postRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const uploadRoutes = require('./routes/upload');
 const storyRoutes = require('./routes/storyRoutes');
 const updateRoutes = require('./routes/updateRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dating', datingRoutes);
+app.use('/api/blind', blindDatingRoutes);
+app.use('/api/likes', likesRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/update', updateRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Database Connection
 mongoose

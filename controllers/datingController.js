@@ -6,9 +6,9 @@ const cloudinary = require('../config/cloudinary');
 exports.getRecommendations = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     // Find other users who have completed dating profile
-    const recommendations = await User.find({ 
+    const recommendations = await User.find({
       _id: { $ne: req.user.id },
       datingProfileComplete: true
     }).select('-phoneNumber').limit(20);
@@ -26,14 +26,41 @@ exports.switchMatch = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     const targetUserId = req.params.id;
+    const targetUser = await User.findById(targetUserId);
+
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check Chat Slots for Sender
+    if (user.activeChatCount >= user.chatSlots) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have no free chat slots. Please buy more slots to switch vibe.',
+        errorType: 'NO_SLOTS_SENDER'
+      });
+    }
+
+    // Check Chat Slots for Receiver
+    if (targetUser.activeChatCount >= targetUser.chatSlots) {
+      return res.status(400).json({
+        success: false,
+        message: 'This user has no free chat slots at the moment.',
+        errorType: 'NO_SLOTS_RECEIVER'
+      });
+    }
 
     if (user.coins < 100) {
       return res.status(400).json({ message: 'Insufficient coins' });
     }
 
-    // Deduct coins
+    // Deduct coins and Increment Active Chats (Assuming Switch = Start Chat)
     user.coins -= 100;
+    user.activeChatCount += 1;
+    targetUser.activeChatCount += 1;
+
     await user.save();
+    await targetUser.save();
 
     res.json({ success: true, coins: user.coins, message: 'Vibe switched successfully!' });
   } catch (error) {
@@ -47,7 +74,7 @@ exports.switchMatch = async (req, res) => {
 exports.buyCoins = async (req, res) => {
   try {
     const { amount } = req.body;
-    
+
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: 'Invalid amount' });
     }
@@ -69,17 +96,17 @@ exports.acceptDatingTerms = async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      { 
+      {
         datingTermsAccepted: true,
         datingTermsAcceptedAt: new Date()
       },
       { new: true }
     );
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       datingTermsAccepted: user.datingTermsAccepted,
-      message: 'Dating terms accepted!' 
+      message: 'Dating terms accepted!'
     });
   } catch (error) {
     console.error('acceptDatingTerms error:', error);
@@ -150,10 +177,10 @@ exports.updateDatingProfile = async (req, res) => {
       { new: true }
     ).select('-phoneNumber');
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       user,
-      message: 'Dating profile updated!' 
+      message: 'Dating profile updated!'
     });
   } catch (error) {
     console.error('updateDatingProfile error:', error);

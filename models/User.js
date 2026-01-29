@@ -12,6 +12,8 @@ const userSchema = new mongoose.Schema({
     sparse: true, // Allows null/undefined to not conflict uniqueness
   },
   fullName: String,
+  isAdmin: { type: Boolean, default: false },
+  age: Number,
   gender: {
     type: String,
     enum: ['Male', 'Female', 'Other'],
@@ -43,7 +45,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  
+
   // Dating Mode Profile Fields
   datingTermsAccepted: {
     type: Boolean,
@@ -71,7 +73,25 @@ const userSchema = new mongoose.Schema({
   datingBio: String,
   datingInterests: [String],
   datingPhotos: [String], // Array of photo URLs
-  
+
+  // Likes & Chat Slots System
+  likes: {
+    type: Number,
+    default: 5, // Starting likes
+  },
+  lastLikeRegenTime: {
+    type: Date,
+    default: Date.now,
+  },
+  chatSlots: {
+    type: Number,
+    default: 2, // Will be set based on gender: 2 for male, 4 for female
+  },
+  activeChatCount: {
+    type: Number,
+    default: 0,
+  },
+
   createdAt: {
     type: Date,
     default: Date.now,
