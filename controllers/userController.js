@@ -203,6 +203,69 @@ exports.blockUser = async (req, res) => {
   }
 };
 
+// @desc    Delete User Account
+// @route   DELETE /api/users/profile
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 1. Delete user's posts
+    await require('../models/Post').deleteMany({ user: userId });
+
+    // 2. Delete user's stories
+    await require('../models/Story').deleteMany({ user: userId });
+
+    // 3. Delete user's messages (sent and received)
+    await require('../models/Message').deleteMany({
+      $or: [{ sender: userId }, { receiver: userId }]
+    });
+
+    // 4. Delete user's likes (sent and received)
+    await require('../models/Like').deleteMany({
+      $or: [{ sender: userId }, { receiver: userId }]
+    });
+
+    // 5. Delete activity logs
+    await require('../models/ActivityLog').deleteMany({ user: userId });
+
+    // 6. Remove from Blind Date Queue
+    await require('../models/BlindDateQueue').deleteMany({ user: userId });
+
+    // 7. Handle Blind Date Sessions
+    // (You might want to mark them as ended if one user deletes account)
+    const BlindDateSession = require('../models/BlindDateSession');
+    await BlindDateSession.deleteMany({
+      $or: [{ user1: userId }, { user2: userId }]
+    });
+
+    // 8. Remove user from others' followers/following arrays
+    await User.updateMany(
+      { followers: userId },
+      { $pull: { followers: userId } }
+    );
+    await User.updateMany(
+      { following: userId },
+      { $pull: { following: userId } }
+    );
+    await User.updateMany(
+      { blockedUsers: userId },
+      { $pull: { blockedUsers: userId } }
+    );
+
+    // 9. Finally, delete the user record
+    await User.findByIdAndDelete(userId);
+
+    res.json({ message: 'Account and all associated data deleted successfully' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 
 // @desc    Get All Users (Admin Only)
 // @route   GET /api/users/admin/all
