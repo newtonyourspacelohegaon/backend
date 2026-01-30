@@ -88,10 +88,20 @@ exports.googleLogin = async (req, res) => {
   }
 
   try {
+    // Accept tokens from multiple client IDs (Web, Android, iOS)
+    const audiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
+      '560227419750-6vpcqgo8l2uopfg9e4j24dq7102dkb5i.apps.googleusercontent.com', // Explicit Web ID
+      '560227419750-45vcnpoiog5k2unnrc057caaq6s5imp4.apps.googleusercontent.com'  // Explicit Android ID
+    ].filter(Boolean); // Remove null/undefined values
+
+    console.log('Verifying Google token with audiences:', audiences);
+
     // Verify the ID token using Google's client library
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: audiences,
     });
 
     const payload = ticket.getPayload();
