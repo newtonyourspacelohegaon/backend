@@ -49,8 +49,16 @@ app.use('/api/admin', adminRoutes);
 // Database Connection
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB Connected Successfully');
+    // Ensure indexes are synced (this drops the bad unique index on phoneNumber)
+    const User = require('./models/User');
+    try {
+      await User.syncIndexes();
+      console.log('✅ User Indexes Synced');
+    } catch (idxErr) {
+      console.error('⚠️ Index Sync Warning:', idxErr.message);
+    }
   })
   .catch((err) => {
     console.error('❌ MongoDB Connection Error:', err);
