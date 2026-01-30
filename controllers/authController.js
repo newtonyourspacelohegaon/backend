@@ -30,7 +30,7 @@ exports.sendOtp = async (req, res) => {
 };
 
 const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new OAuth2Client(); // Initialize without ID to avoid default audience check conflict
 
 // @desc    Verify OTP and Login/Register
 // @route   POST /api/auth/verify-otp
