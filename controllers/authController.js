@@ -19,15 +19,18 @@ exports.sendOtp = async (req, res) => {
 
   // In production, integrate Twilio/Fast2SMS here
   // For demo, we'll just return success and use a fixed OTP '123456'
-  
+
   console.log(`OTP for ${phoneNumber}: 123456`);
 
-  res.status(200).json({ 
-    success: true, 
-    message: 'OTP sent successfully', 
+  res.status(200).json({
+    success: true,
+    message: 'OTP sent successfully',
     otp: '123456' // Sending back for easier testing
   });
 };
+
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // @desc    Verify OTP and Login/Register
 // @route   POST /api/auth/verify-otp
@@ -72,5 +75,64 @@ exports.verifyOtp = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Google Login
+// @route   POST /api/auth/google
+exports.googleLogin = async (req, res) => {
+  const { idToken } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({ message: 'ID Token is required' });
+  }
+
+  try {
+    // Verify the ID token using Google's client library
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Check if user exists by googleId OR email
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    let isNewUser = false;
+    if (!user) {
+      // Create new user
+      user = await User.create({
+        googleId,
+        email,
+        fullName: name,
+        profileImage: picture,
+      });
+      isNewUser = true;
+    } else {
+      // If user exists but doesn't have googleId linked yet (e.g. registered via phone with same email)
+      if (!user.googleId) {
+        user.googleId = googleId;
+        await user.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      token: generateToken(user._id),
+      isNewUser,
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        fullName: user.fullName,
+        profileImage: user.profileImage,
+        coins: user.coins
+      },
+    });
+  } catch (error) {
+    console.error('Google Auth Error:', error);
+    res.status(401).json({ message: 'Invalid Google Token' });
   }
 };

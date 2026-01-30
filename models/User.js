@@ -3,8 +3,20 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   phoneNumber: {
     type: String,
-    required: true,
     unique: true,
+    sparse: true, // Allows multiple users without phone numbers
+  },
+  email: {
+    type: String,
+    unique: true,
+    index: true,
+    sparse: true,
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    index: true,
+    sparse: true,
   },
   username: {
     type: String,
