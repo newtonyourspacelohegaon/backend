@@ -36,11 +36,16 @@ const fetchLatestRelease = async () => {
     );
 
     if (!response.ok) {
-      console.log('No GitHub release found, using fallback');
+      console.log(`GitHub API error: ${response.status} ${response.statusText}`);
+      try {
+        const errorText = await response.text();
+        console.log(`Error body: ${errorText}`);
+      } catch (e) { }
       return null;
     }
 
     const release = await response.json();
+    console.log(`Found release: ${release.tag_name}`);
 
     // Find APK asset
     const apkAsset = release.assets?.find(asset =>
@@ -48,7 +53,7 @@ const fetchLatestRelease = async () => {
     );
 
     if (!apkAsset) {
-      console.log('No APK found in release');
+      console.log('No APK found in release assets. Assets found:', release.assets?.map(a => a.name));
       return null;
     }
 
