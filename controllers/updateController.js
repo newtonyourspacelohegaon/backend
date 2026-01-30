@@ -27,7 +27,10 @@ const fetchLatestRelease = async () => {
       {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'CampusConnect-App'
+          'User-Agent': 'CampusConnect-App',
+          ...(process.env.GITHUB_TOKEN && {
+            'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`
+          })
         }
       }
     );
@@ -38,9 +41,9 @@ const fetchLatestRelease = async () => {
     }
 
     const release = await response.json();
-    
+
     // Find APK asset
-    const apkAsset = release.assets?.find(asset => 
+    const apkAsset = release.assets?.find(asset =>
       asset.name.endsWith('.apk')
     );
 
@@ -53,9 +56,9 @@ const fetchLatestRelease = async () => {
     const versionName = release.tag_name.replace('v', '');
     const versionParts = versionName.split('.');
     // Simple version code calculation: major*100 + minor*10 + patch
-    const versionCode = parseInt(versionParts[0] || 1) * 100 + 
-                        parseInt(versionParts[1] || 0) * 10 + 
-                        parseInt(versionParts[2] || 0);
+    const versionCode = parseInt(versionParts[0] || 1) * 100 +
+      parseInt(versionParts[1] || 0) * 10 +
+      parseInt(versionParts[2] || 0);
 
     cachedRelease = {
       latestVersionCode: versionCode,
@@ -64,10 +67,10 @@ const fetchLatestRelease = async () => {
       apkUrl: apkAsset.browser_download_url,
       releaseNotes: release.body?.replace('[FORCE]', '').trim() || 'Bug fixes and improvements'
     };
-    
+
     cacheTimestamp = Date.now();
     console.log('✅ Fetched latest release:', versionName);
-    
+
     return cachedRelease;
   } catch (error) {
     console.error('Error fetching GitHub release:', error);
@@ -92,7 +95,7 @@ const FALLBACK_VERSION = {
 exports.checkUpdate = async (req, res) => {
   try {
     const { platform, versionCode } = req.query;
-    
+
     if (!platform || platform !== 'android') {
       return res.json({
         updateAvailable: false,
@@ -103,9 +106,9 @@ exports.checkUpdate = async (req, res) => {
     // Get latest from GitHub or use fallback
     const latestInfo = await fetchLatestRelease() || FALLBACK_VERSION;
     const currentVersionCode = parseInt(versionCode) || 0;
-    
+
     const updateAvailable = currentVersionCode < latestInfo.latestVersionCode;
-    
+
     res.json({
       updateAvailable,
       latestVersionCode: latestInfo.latestVersionCode,
@@ -116,9 +119,9 @@ exports.checkUpdate = async (req, res) => {
     });
   } catch (error) {
     console.error('Check update error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       updateAvailable: false,
-      message: 'Error checking for updates' 
+      message: 'Error checking for updates'
     });
   }
 };
@@ -146,13 +149,13 @@ exports.getLatestVersion = async (req, res) => {
 exports.refreshCache = async (req, res) => {
   cachedRelease = null;
   cacheTimestamp = 0;
-  
+
   const latestInfo = await fetchLatestRelease();
-  
-  res.json({ 
-    success: true, 
+
+  res.json({
+    success: true,
     message: 'Cache cleared and refreshed',
-    latest: latestInfo 
+    latest: latestInfo
   });
 };
 
