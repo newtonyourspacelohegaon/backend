@@ -121,10 +121,15 @@ exports.googleLogin = async (req, res) => {
       });
       isNewUser = true;
     } else {
-      // If user exists but doesn't have googleId linked yet (e.g. registered via phone with same email)
+      // If user exists but doesn't have googleId linked yet
       if (!user.googleId) {
         user.googleId = googleId;
         await user.save();
+      }
+
+      // KEY FIX: If user exists but hasn't completed setup (no username), treat as new user
+      if (!user.username) {
+        isNewUser = true;
       }
     }
 
