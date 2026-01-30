@@ -22,26 +22,27 @@ const fetchLatestRelease = async () => {
   }
 
   try {
+    const githubToken = process.env.GITHUB_TOKEN;
+    const isTokenValid = githubToken && githubToken !== 'your_github_token_here' && githubToken !== '';
+
     const response = await fetch(
       `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
       {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'CampusConnect-App',
-          ...(process.env.GITHUB_TOKEN && {
-            'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`
+          ...(isTokenValid && {
+            'Authorization': `Bearer ${githubToken}`
           })
         }
       }
     );
 
     if (!response.ok) {
-      console.log(`GitHub API error: ${response.status} ${response.statusText}`);
-      try {
-        const errorText = await response.text();
-        console.log(`Error body: ${errorText}`);
-      } catch (e) { }
-      return null;
+      const errorText = await response.text();
+      const diagnostic = `GitHub API error: ${response.status} ${response.statusText}. Target: ${GITHUB_OWNER}/${GITHUB_REPO}. Token used: ${isTokenValid}. Response: ${errorText.substring(0, 100)}`;
+      console.log(diagnostic);
+      return { error: diagnostic };
     }
 
     const release = await response.json();
@@ -53,8 +54,9 @@ const fetchLatestRelease = async () => {
     );
 
     if (!apkAsset) {
-      console.log('No APK found in release assets. Assets found:', release.assets?.map(a => a.name));
-      return null;
+      const msg = `No APK found in release assets. Assets found: ${release.assets?.map(a => a.name).join(', ')}`;
+      console.log(msg);
+      return { error: msg };
     }
 
     // Parse version from tag (e.g., "v1.0.1" -> { name: "1.0.1", code: 2 })
@@ -78,8 +80,8 @@ const fetchLatestRelease = async () => {
 
     return cachedRelease;
   } catch (error) {
-    console.error('Error fetching GitHub release:', error);
-    return null;
+    console.error('EXCEPTION in fetchLatestRelease:', error.message);
+    return { error: `Exception: ${error.message}` };
   }
 };
 
@@ -156,6 +158,14 @@ exports.refreshCache = async (req, res) => {
   cacheTimestamp = 0;
 
   const latestInfo = await fetchLatestRelease();
+
+  if (latestInfo && latestInfo.error) {
+    return res.json({
+      success: false,
+      message: 'Failed to refresh from GitHub',
+      diagnostic: latestInfo.error
+    });
+  }
 
   res.json({
     success: true,
