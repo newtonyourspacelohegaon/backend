@@ -101,7 +101,7 @@ const FALLBACK_VERSION = {
  */
 exports.checkUpdate = async (req, res) => {
   try {
-    const { platform, versionCode } = req.query;
+    const { platform, versionCode, versionName } = req.query;
 
     if (!platform || platform !== 'android') {
       return res.json({
@@ -112,9 +112,37 @@ exports.checkUpdate = async (req, res) => {
 
     // Get latest from GitHub or use fallback
     const latestInfo = await fetchLatestRelease() || FALLBACK_VERSION;
-    const currentVersionCode = parseInt(versionCode) || 0;
 
-    const updateAvailable = currentVersionCode < latestInfo.latestVersionCode;
+    let updateAvailable = false;
+
+    if (versionName) {
+      // Comparison by Version Name (e.g., "1.0.9")
+      // If names are different, we check if latest is actually newer
+      if (versionName !== latestInfo.latestVersionName) {
+        // Simple semver comparison: split by '.', compare parts
+        const currentParts = versionName.split('.').map(Number);
+        const latestParts = latestInfo.latestVersionName.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+          const current = currentParts[i] || 0;
+          const latest = latestParts[i] || 0;
+          if (latest > current) {
+            updateAvailable = true;
+            break;
+          }
+          if (current > latest) {
+            updateAvailable = false;
+            break;
+          }
+        }
+      } else {
+        updateAvailable = false; // Names are identical, no update needed
+      }
+    } else if (versionCode) {
+      // Legacy comparison by Version Code
+      const currentVersionCode = parseInt(versionCode) || 0;
+      updateAvailable = currentVersionCode < latestInfo.latestVersionCode;
+    }
 
     res.json({
       updateAvailable,
