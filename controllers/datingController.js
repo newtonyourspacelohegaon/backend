@@ -181,6 +181,25 @@ exports.switchMatch = async (req, res) => {
     user.activeChatCount += 1;
     targetUser.activeChatCount += 1;
 
+    // Create/Update Mutual Match in Like Model
+    const Like = require('../models/Like');
+    await Like.findOneAndUpdate(
+      {
+        $or: [
+          { sender: req.user.id, receiver: targetUserId },
+          { sender: targetUserId, receiver: req.user.id }
+        ]
+      },
+      {
+        sender: req.user.id,
+        receiver: targetUserId,
+        status: 'chatting',
+        chatStartedAt: new Date(),
+        revealedAt: new Date()
+      },
+      { upsert: true, new: true }
+    );
+
     await user.save();
     await targetUser.save();
 
