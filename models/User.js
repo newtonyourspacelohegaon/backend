@@ -96,7 +96,7 @@ const userSchema = new mongoose.Schema({
   },
   chatSlots: {
     type: Number,
-    default: 2, // Will be set based on gender: 2 for male, 4 for female
+    default: 0, // Will be set to 1 for Male, 4 for Female on profile completion
   },
   activeChatCount: {
     type: Number,

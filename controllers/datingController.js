@@ -350,6 +350,15 @@ exports.updateDatingProfile = async (req, res) => {
       datingProfileComplete: datingProfileComplete || true
     };
 
+    // Set initial chat slots based on gender if profile is being completed for the first time
+    const currentUser = await User.findById(req.user.id);
+    if (!currentUser.datingProfileComplete && (datingProfileComplete || true)) {
+      // Only set if not already set (e.g. via purchase)
+      if (!currentUser.chatSlots || currentUser.chatSlots === 0) {
+        updateData.chatSlots = (datingGender === 'Man') ? 1 : 4;
+      }
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
       updateData,

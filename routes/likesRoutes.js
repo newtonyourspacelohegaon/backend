@@ -13,6 +13,7 @@ const {
     declineLike,
     getActiveChats,
     passUser,
+    unmatchUser,
 } = require('../controllers/likesController');
 
 // All routes require authentication
@@ -31,6 +32,7 @@ router.post('/decline/:likeId', declineLike);
 router.post('/reveal/:likeId', revealProfile);
 router.post('/start-chat/:likeId', startChat);
 router.post('/direct-chat/:likeId', directChat);
+router.post('/unmatch/:likeId', unmatchUser);
 router.get('/active-chats', getActiveChats);
 
 // Purchases

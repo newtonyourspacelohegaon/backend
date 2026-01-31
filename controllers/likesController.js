@@ -74,8 +74,41 @@ exports.sendLike = async (req, res) => {
             return res.status(400).json({ message: 'You already liked this person!' });
         }
 
-        // Create like
-        const like = await Like.create({
+        // Check if there's a reciprocal like (They already liked you)
+        const reciprocalLike = await Like.findOne({ sender: targetUserId, receiver: req.user.id });
+
+        if (reciprocalLike) {
+            // Check chat slot availability
+            if (user.activeChatCount >= user.chatSlots) {
+                return res.status(400).json({ message: 'They liked you too, but you have no available chat slots!' });
+            }
+            const targetUser = await User.findById(targetUserId);
+            if (targetUser.activeChatCount >= targetUser.chatSlots) {
+                return res.status(400).json({ message: 'They liked you too, but their chat slots are full!' });
+            }
+
+            // Create mutual match
+            reciprocalLike.status = 'chatting';
+            reciprocalLike.chatStartedAt = new Date();
+            reciprocalLike.revealedAt = new Date();
+            await reciprocalLike.save();
+
+            // Update chat counts
+            user.activeChatCount += 1;
+            user.likes -= 1;
+            await user.save();
+            await User.findByIdAndUpdate(targetUserId, { $inc: { activeChatCount: 1 } });
+
+            return res.json({
+                success: true,
+                likes: user.likes,
+                isMatch: true,
+                message: 'It\'s a Match! You can now start chatting.',
+            });
+        }
+
+        // Create new like
+        await Like.create({
             sender: req.user.id,
             receiver: targetUserId,
         });
@@ -87,6 +120,7 @@ exports.sendLike = async (req, res) => {
         res.json({
             success: true,
             likes: user.likes,
+            isMatch: false,
             message: 'Like sent! They will see you in their Chat tab.',
         });
     } catch (error) {
@@ -114,10 +148,11 @@ exports.getReceivedLikes = async (req, res) => {
             sender: like.status === 'revealed' || like.status === 'chatting'
                 ? like.sender
                 : {
-                    // Blurred data - only show minimal info
+                    // Blurred data - show minimal info and one photo for blurring
                     _id: like.sender._id,
                     datingInterests: like.sender.datingInterests?.slice(0, 3),
                     datingGender: like.sender.datingGender,
+                    datingPhotos: like.sender.datingPhotos?.slice(0, 1),
                 },
         }));
 
@@ -412,6 +447,34 @@ exports.passUser = async (req, res) => {
         res.json({ success: true, message: 'User passed.' });
     } catch (error) {
         console.error('passUser error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// @desc    Unmatch/Archive a chat to free up a slot
+// @route   POST /api/dating/unmatch/:likeId
+exports.unmatchUser = async (req, res) => {
+    try {
+        const like = await Like.findById(req.params.likeId);
+
+        if (!like || (like.sender.toString() !== req.user.id && like.receiver.toString() !== req.user.id)) {
+            return res.status(404).json({ message: 'Chat not found' });
+        }
+
+        if (like.status !== 'chatting') {
+            return res.status(400).json({ message: 'Chat is not active' });
+        }
+
+        like.status = 'archived';
+        await like.save();
+
+        // Decrement activeChatCount for both
+        await User.findByIdAndUpdate(like.sender, { $inc: { activeChatCount: -1 } });
+        await User.findByIdAndUpdate(like.receiver, { $inc: { activeChatCount: -1 } });
+
+        res.json({ success: true, message: 'Unmatched. Slot freed.' });
+    } catch (error) {
+        console.error('unmatchUser error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
