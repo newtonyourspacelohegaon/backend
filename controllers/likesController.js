@@ -385,3 +385,33 @@ exports.getActiveChats = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+// @desc    Pass/Reject a user in discovery
+// @route   POST /api/dating/pass/:userId
+exports.passUser = async (req, res) => {
+    try {
+        const targetUserId = req.params.userId;
+
+        // Check if already interacted
+        const existingInteraction = await Like.findOne({
+            sender: req.user.id,
+            receiver: targetUserId
+        });
+
+        if (existingInteraction) {
+            existingInteraction.status = 'passed';
+            await existingInteraction.save();
+        } else {
+            await Like.create({
+                sender: req.user.id,
+                receiver: targetUserId,
+                status: 'passed'
+            });
+        }
+
+        res.json({ success: true, message: 'User passed.' });
+    } catch (error) {
+        console.error('passUser error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

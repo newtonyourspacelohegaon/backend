@@ -13,7 +13,7 @@ const likeSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'revealed', 'chatting', 'declined'],
+        enum: ['pending', 'revealed', 'chatting', 'declined', 'passed'],
         default: 'pending',
     },
     revealedAt: Date,

@@ -12,6 +12,7 @@ const {
     buyChatSlot,
     declineLike,
     getActiveChats,
+    passUser,
 } = require('../controllers/likesController');
 
 // All routes require authentication
@@ -22,6 +23,7 @@ router.get('/my-status', getMyStatus);
 
 // Likes
 router.post('/like/:userId', sendLike);
+router.post('/pass/:userId', passUser);
 router.get('/likes', getReceivedLikes);
 router.post('/decline/:likeId', declineLike);
 

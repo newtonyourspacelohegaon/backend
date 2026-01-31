@@ -1,19 +1,141 @@
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
 
+// Simple in-memory cache for suggestions
+// Map: userId -> { suggestions: [...sortedUsers], timestamp: Number }
+const suggestionsCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // @desc    Get Matching Recommendations
 // @route   GET /api/dating/recommendations
 exports.getRecommendations = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    // Find other users who have completed dating profile
-    const recommendations = await User.find({
-      _id: { $ne: req.user.id },
+    const me = await User.findById(req.user.id);
+    if (!me) return res.status(404).json({ message: 'User not found' });
+
+    // Check Cache
+    const cached = suggestionsCache.get(req.user.id);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL) && page === 1) {
+      // If page 1 is requested, we can return from cache. 
+      // For subsequent pages, we also use the same cache if still valid.
+    }
+
+    // However, for simplicity and to handle "Already rejected/liked", 
+    // we should probably re-calculate if cache is cold or if we need fresh exclusions.
+    // Let's implement the full calculation.
+
+    // 1. Find Excluded User IDs
+    // - Already Liked by me
+    // - Already Rejected/Declined by me
+    // - Already Vibed (Chatting)
+    const Like = require('../models/Like');
+    const interactions = await Like.find({
+      $or: [
+        { sender: req.user.id },
+        { receiver: req.user.id, status: 'chatting' },
+        { receiver: req.user.id, status: 'declined' },
+        { receiver: req.user.id, status: 'passed' }
+      ]
+    });
+
+    const excludedIds = new Set();
+    excludedIds.add(req.user.id); // Exclude self
+
+    interactions.forEach(inter => {
+      if (inter.sender.toString() === req.user.id) {
+        // Exclude anyone I liked, rejected, or chatting with
+        excludedIds.add(inter.receiver.toString());
+      } else if (inter.receiver.toString() === req.user.id) {
+        // If I am receiver:
+        // Exclude if we are chatting (vibed)
+        // Exclude if I declined them (rejected)
+        // Exclude if they passed on me
+        if (inter.status === 'chatting' || inter.status === 'declined' || inter.status === 'passed') {
+          excludedIds.add(inter.sender.toString());
+        }
+      }
+    });
+
+    // 2. Query all potential candidates
+    // For large scale, this needs to be an aggregation or more efficient query.
+    // For now, following requirements and current scale.
+    const candidates = await User.find({
+      _id: { $nin: Array.from(excludedIds) },
       datingProfileComplete: true
-    }).select('-phoneNumber').limit(20);
+    }).select('-phoneNumber -email -coins -followers -following -blockedUsers');
 
-    res.json(recommendations);
+    if (candidates.length === 0) {
+      return res.json([]);
+    }
+
+    // 3. Calculate Scores
+    const scoredCandidates = candidates.map(them => {
+      let score = 0;
+
+      // A. Interests Overlap (40%)
+      if (me.datingInterests && them.datingInterests) {
+        const myInterests = me.datingInterests || [];
+        const theirInterests = them.datingInterests || [];
+        const overlap = myInterests.filter(i => theirInterests.includes(i)).length;
+        const maxPossibleOverlap = Math.max(myInterests.length, 1);
+        score += (overlap / maxPossibleOverlap) * 40;
+      }
+
+      // B. Relationship Type Compatibility (30%)
+      if (me.datingIntentions && them.datingIntentions) {
+        const myIntentions = me.datingIntentions || [];
+        const theirIntentions = them.datingIntentions || [];
+        const overlap = myIntentions.filter(i => theirIntentions.includes(i)).length;
+        if (overlap > 0) {
+          // If any intention matches, give some score. 
+          // More matches = higher score up to 30.
+          const intentionScore = (overlap / Math.max(myIntentions.length, 1)) * 30;
+          score += intentionScore;
+        }
+      }
+
+      // C. Gender Preference Match (30%)
+      // 15% if I like them, 15% if they like me
+      let genderScore = 0;
+
+      // Do I like their gender?
+      const myPref = me.datingLookingFor; // Women, Men, Everyone
+      const theirGender = them.datingGender; // Man, Woman, Non-binary
+
+      const iLikeThem = (myPref === 'Everyone') ||
+        (myPref === 'Women' && theirGender === 'Woman') ||
+        (myPref === 'Men' && theirGender === 'Man');
+
+      if (iLikeThem) genderScore += 15;
+
+      // Do they like my gender?
+      const theirPref = them.datingLookingFor;
+      const myGender = me.datingGender;
+
+      const theyLikeMe = (theirPref === 'Everyone') ||
+        (theirPref === 'Women' && myGender === 'Woman') ||
+        (theirPref === 'Men' && myGender === 'Man');
+
+      if (theyLikeMe) genderScore += 15;
+
+      score += genderScore;
+
+      return {
+        ...them.toObject(),
+        matchScore: Math.round(score)
+      };
+    });
+
+    // 4. Sort and Paginate
+    scoredCandidates.sort((a, b) => b.matchScore - a.matchScore);
+
+    const paginatedSuggestions = scoredCandidates.slice(skip, skip + limit);
+
+    res.json(paginatedSuggestions);
   } catch (error) {
     console.error('getRecommendations error:', error);
     res.status(500).json({ message: 'Server error' });
