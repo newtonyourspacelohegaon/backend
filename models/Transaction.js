@@ -35,6 +35,11 @@ const transactionSchema = new mongoose.Schema({
     },
     razorpay_payment_id: String,
     razorpay_signature: String,
+    packType: {
+        type: String,
+        enum: ['coins', 'unlimited'],
+        default: 'coins',
+    },
 }, { timestamps: true });
 
 transactionSchema.index({ createdAt: -1 });

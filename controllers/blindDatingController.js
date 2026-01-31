@@ -3,8 +3,12 @@ const BlindDateQueue = require('../models/BlindDateQueue');
 const User = require('../models/User');
 
 const SESSION_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-const EXTENSION_COST = 100; // coins
-const EXTENSION_DURATION_MS = 10 * 60 * 1000; // 10 more minutes
+const REVEAL_COST = 70;
+const CHAT_ONLY_COST = 200;
+const CHAT_AFTER_REVEAL_COST = 100;
+
+const EXTENSION_COST = 100; // legacy - keep for compatibility if needed elsewhere
+const EXTENSION_DURATION_MS = 10 * 60 * 1000;
 
 // @desc    Join blind dating queue
 // @route   POST /api/blind/join
@@ -162,6 +166,7 @@ exports.getStatus = async (req, res) => {
                 sessionId: session._id,
                 messages: session.messages,
                 extended: session.extended,
+                expiresAt: session.expiresAt,
             });
         }
 
@@ -259,6 +264,7 @@ exports.getMessages = async (req, res) => {
             status: session.status,
             messages: session.messages,
             extended: session.extended,
+            expiresAt: session.expiresAt,
         });
     } catch (error) {
         console.error('getMessages error:', error);
@@ -266,23 +272,19 @@ exports.getMessages = async (req, res) => {
     }
 };
 
-// @desc    Extend blind date session (costs coins)
-// @route   POST /api/blind/session/:id/extend
-exports.extendSession = async (req, res) => {
+// @desc    Record post-timer choice (reveal, chat, decline)
+// @route   POST /api/blind/session/:id/choice
+exports.recordChoice = async (req, res) => {
     try {
         const userId = req.user.id;
         const sessionId = req.params.id;
+        const { choice } = req.body; // 'reveal', 'chat', 'decline'
 
-        const user = await User.findById(userId);
-
-        if (user.coins < EXTENSION_COST) {
-            return res.status(400).json({
-                message: `Insufficient coins. You need ${EXTENSION_COST} coins.`,
-                required: EXTENSION_COST,
-                current: user.coins,
-            });
+        if (!['reveal', 'chat', 'decline'].includes(choice)) {
+            return res.status(400).json({ message: 'Invalid choice' });
         }
 
+        const user = await User.findById(userId);
         const session = await BlindDateSession.findOne({
             _id: sessionId,
             $or: [{ user1: userId }, { user2: userId }],
@@ -292,51 +294,134 @@ exports.extendSession = async (req, res) => {
             return res.status(404).json({ message: 'Session not found' });
         }
 
-        if (session.status !== 'active' && session.status !== 'ended') {
-            return res.status(400).json({ message: 'Session cannot be extended' });
+        const isUser1 = session.user1.toString() === userId;
+        const currentChoice = isUser1 ? session.user1Choice : session.user2Choice;
+
+        if (currentChoice !== 'none' && currentChoice !== 'reveal') {
+            return res.status(400).json({ message: 'Choice already recorded' });
         }
 
-        // Deduct coins
-        user.coins -= EXTENSION_COST;
-        await user.save();
+        let cost = 0;
+        if (choice === 'reveal') {
+            cost = REVEAL_COST;
+        } else if (choice === 'chat') {
+            // Check if already revealed
+            const revealed = isUser1 ? session.user1Revealed : session.user2Revealed;
+            cost = revealed ? CHAT_AFTER_REVEAL_COST : CHAT_ONLY_COST;
+        }
 
-        // Extend session
-        session.status = 'extended';
-        session.extended = true;
-        session.extendedBy = userId;
-        session.expiresAt = new Date(Date.now() + EXTENSION_DURATION_MS);
+        // Check coins
+        if (cost > 0) {
+            const isUnlimited = user.unlimitedCoinsExpiry && new Date(user.unlimitedCoinsExpiry) > new Date();
+            if (!isUnlimited && user.coins < cost) {
+                return res.status(400).json({
+                    message: `Insufficient coins. You need ${cost} coins.`,
+                    required: cost,
+                    current: user.coins,
+                });
+            }
+
+            if (!isUnlimited) {
+                user.coins -= cost;
+                await user.save();
+            }
+        }
+
+        // Update session
+        if (isUser1) {
+            session.user1Choice = choice;
+            if (choice === 'reveal' || choice === 'chat') session.user1Revealed = true;
+        } else {
+            session.user2Choice = choice;
+            if (choice === 'reveal' || choice === 'chat') session.user2Revealed = true;
+        }
+
+        // Log deduction
+        if (cost > 0) {
+            const { logActivity } = require('../utils/activityLogger');
+            await logActivity({
+                userId,
+                action: 'COINS_DEDUCTED',
+                details: { amount: cost, reason: `Blind Date Choice: ${choice}`, sessionId },
+                req
+            });
+        }
+
+        // Check for mutual chat agreement
+        if (session.user1Choice === 'chat' && session.user2Choice === 'chat') {
+            // Check chat slots for both
+            const user1 = await User.findById(session.user1);
+            const user2 = await User.findById(session.user2);
+
+            if (user1.activeChatCount >= user1.chatSlots || user2.activeChatCount >= user2.chatSlots) {
+                // One of them is out of slots. We can't transition to permanent chat.
+                // But they already paid. In a real app, we might prompt them to buy slots.
+                // For now, let's proceed but warn. Or we could halt here.
+                // Prompt says "Requires available chat slot".
+                return res.status(400).json({
+                    success: false,
+                    message: 'One or both users have no available chat slots. Free up slots to continue.',
+                    slotsFull: true
+                });
+            }
+
+            // Create permanent chat (Like record)
+            const Like = require('../models/Like');
+            await Like.findOneAndUpdate(
+                { sender: session.user1, receiver: session.user2 },
+                {
+                    status: 'chatting',
+                    revealedAt: new Date(),
+                    chatStartedAt: new Date(),
+                    isBlindMatch: true
+                },
+                { upsert: true, new: true }
+            );
+
+            // Increment chat counts
+            user1.activeChatCount += 1;
+            await user1.save();
+            user2.activeChatCount += 1;
+            await user2.save();
+
+            session.status = 'extended'; // Mark as successfully transitioned
+        } else if (session.user1Choice === 'decline' || session.user2Choice === 'decline') {
+            session.status = 'ended';
+        }
+
         await session.save();
 
-        // Log the activity
-        const { logActivity } = require('../utils/activityLogger');
-        await logActivity({
-            userId,
-            action: 'COINS_DEDUCTED',
-            details: {
-                amount: EXTENSION_COST,
-                reason: 'Blind Date Session Extension',
-                sessionId: session._id
-            },
-            req
-        });
-
-        // Get partner's profile for reveal
-        const partnerId = session.user1.toString() === userId ? session.user2 : session.user1;
-        const partner = await User.findById(partnerId).select(
-            'fullName username profileImage datingBio datingInterests datingAge datingCollege datingPhotos'
-        );
+        // Get partner profile if revealed
+        let partnerProfile = null;
+        const partnerRevealed = isUser1 ? session.user2Revealed : session.user1Revealed;
+        if (partnerRevealed || choice === 'chat') {
+            const partnerId = isUser1 ? session.user2 : session.user1;
+            partnerProfile = await User.findById(partnerId).select(
+                'fullName username profileImage datingBio datingInterests datingAge datingCollege datingPhotos'
+            );
+        }
 
         res.json({
             success: true,
-            message: 'Session extended! You can now see their profile.',
+            message: `Choice '${choice}' recorded.`,
             coins: user.coins,
-            partnerProfile: partner,
-            expiresAt: session.expiresAt,
+            status: session.status,
+            partnerProfile,
+            user1Choice: session.user1Choice,
+            user2Choice: session.user2Choice
         });
+
     } catch (error) {
-        console.error('extendSession error:', error);
+        console.error('recordChoice error:', error);
         res.status(500).json({ message: 'Server error' });
     }
+};
+
+// @desc    Extend blind date session (Keep for backward compatibility)
+exports.extendSession = async (req, res) => {
+    // Redirect to recordChoice for 'reveal' as it's the closest legacy logic
+    req.body.choice = 'reveal';
+    return exports.recordChoice(req, res);
 };
 
 // @desc    End blind date session manually

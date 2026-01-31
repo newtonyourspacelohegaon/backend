@@ -7,6 +7,7 @@ const {
     sendMessage,
     getMessages,
     extendSession,
+    recordChoice,
     endSession,
 } = require('../controllers/blindDatingController');
 const { protect } = require('../middleware/authMiddleware');
@@ -20,6 +21,7 @@ router.get('/status', protect, getStatus);
 router.post('/session/:id/message', protect, sendMessage);
 router.get('/session/:id/messages', protect, getMessages);
 router.post('/session/:id/extend', protect, extendSession);
+router.post('/session/:id/choice', protect, recordChoice);
 router.post('/session/:id/end', protect, endSession);
 
 module.exports = router;

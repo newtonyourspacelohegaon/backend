@@ -18,6 +18,10 @@ const likeSchema = new mongoose.Schema({
     },
     revealedAt: Date,
     chatStartedAt: Date,
+    isBlindMatch: {
+        type: Boolean,
+        default: false,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

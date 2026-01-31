@@ -88,7 +88,7 @@ const userSchema = new mongoose.Schema({
   // Likes & Chat Slots System
   likes: {
     type: Number,
-    default: 5, // Starting likes
+    default: 10, // Starting likes
   },
   lastLikeRegenTime: {
     type: Date,
@@ -102,6 +102,7 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  unlimitedCoinsExpiry: Date, // Expiry timestamp for unlimited plan
 
   createdAt: {
     type: Date,

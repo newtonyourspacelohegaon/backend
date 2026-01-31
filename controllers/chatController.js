@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { logActivity } = require('../utils/activityLogger');
 
 // @desc    Send a message
 // @route   POST /api/chat/send
@@ -9,7 +10,7 @@ exports.sendMessage = async (req, res) => {
     const senderId = req.user.id;
 
     if (!receiverId || !text) {
-        return res.status(400).json({ message: 'Receiver and text are required' });
+      return res.status(400).json({ message: 'Receiver and text are required' });
     }
 
     const newMessage = new Message({
@@ -20,8 +21,6 @@ exports.sendMessage = async (req, res) => {
 
     await newMessage.save();
 
-    // In a real app, emit socket event here
-    
     res.json(newMessage);
   } catch (error) {
     console.error(error);
@@ -44,6 +43,71 @@ exports.getMessages = async (req, res) => {
     }).sort({ createdAt: 1 }); // Oldest first
 
     res.json(messages);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Mark messages as read
+// @route   PUT /api/chat/read/:userId
+exports.markAsRead = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
+
+    await Message.updateMany(
+      { sender: userId, receiver: currentUserId, read: false },
+      { $set: { read: true, readAt: new Date() } }
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Delete conversation
+// @route   DELETE /api/chat/:userId
+exports.deleteConversation = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
+
+    // Delete all messages between these two users
+    await Message.deleteMany({
+      $or: [
+        { sender: currentUserId, receiver: userId },
+        { sender: userId, receiver: currentUserId },
+      ],
+    });
+
+    // Also remove the Like record (which represents the active chat)
+    const Like = require('../models/Like');
+    const like = await Like.findOneAndDelete({
+      $or: [
+        { sender: currentUserId, receiver: userId },
+        { sender: userId, receiver: currentUserId },
+      ],
+      status: 'chatting'
+    });
+
+    if (like) {
+      // Restore chat slots
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(currentUserId, { $inc: { activeChatCount: -1 } });
+      await User.findByIdAndUpdate(userId, { $inc: { activeChatCount: -1 } });
+
+      await logActivity({
+        userId: currentUserId,
+        action: 'CONVERSATION_DELETED',
+        details: { partnerId: userId, slotFreed: true },
+        req
+      });
+    }
+
+    res.json({ success: true, message: 'Conversation deleted and chat slot freed' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

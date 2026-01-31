@@ -13,9 +13,9 @@ const razorpay = new Razorpay({
 // @route   POST /api/payment/create-order
 exports.createOrder = async (req, res) => {
     try {
-        const { amount, price } = req.body;
+        const { amount, price, packType } = req.body;
 
-        if (!amount || !price) {
+        if (price === undefined) {
             return res.status(400).json({ message: 'Amount and price are required' });
         }
 
@@ -30,11 +30,12 @@ exports.createOrder = async (req, res) => {
         // Save a pending transaction
         await Transaction.create({
             user: req.user.id,
-            amount,
+            amount: amount || 0,
             price,
             status: 'pending',
             paymentMethod: 'Razorpay',
             razorpay_order_id: order.id,
+            packType: packType || 'coins',
         });
 
         res.json({
@@ -93,7 +94,16 @@ exports.verifyPayment = async (req, res) => {
 
         // Update User Balance
         const user = await User.findById(transaction.user);
-        user.coins += transaction.amount;
+
+        if (transaction.packType === 'unlimited') {
+            // Set expiry to 7 days from now
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + 7);
+            user.unlimitedCoinsExpiry = expiry;
+        } else {
+            user.coins += transaction.amount;
+        }
+
         await user.save();
 
         // Log the activity

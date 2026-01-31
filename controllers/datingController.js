@@ -1,5 +1,9 @@
-const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
+
+// Helper: Check if user has an active unlimited plan
+const hasUnlimitedCoins = (user) => {
+  return user.unlimitedCoinsExpiry && new Date(user.unlimitedCoinsExpiry) > new Date();
+};
 
 // Simple in-memory cache for suggestions
 // Map: userId -> { suggestions: [...sortedUsers], timestamp: Number }
@@ -172,12 +176,13 @@ exports.switchMatch = async (req, res) => {
       });
     }
 
-    if (user.coins < 100) {
-      return res.status(400).json({ message: 'Insufficient coins' });
-    }
-
     // Deduct coins and Increment Active Chats (Assuming Switch = Start Chat)
-    user.coins -= 100;
+    if (!hasUnlimitedCoins(user)) {
+      if (user.coins < 100) {
+        return res.status(400).json({ message: 'Insufficient coins' });
+      }
+      user.coins -= 100;
+    }
     user.activeChatCount += 1;
     targetUser.activeChatCount += 1;
 

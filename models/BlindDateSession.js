@@ -32,6 +32,24 @@ const blindDateSessionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     },
+    user1Choice: {
+        type: String,
+        enum: ['none', 'reveal', 'chat', 'decline'],
+        default: 'none',
+    },
+    user2Choice: {
+        type: String,
+        enum: ['none', 'reveal', 'chat', 'decline'],
+        default: 'none',
+    },
+    user1Revealed: {
+        type: Boolean,
+        default: false,
+    },
+    user2Revealed: {
+        type: Boolean,
+        default: false,
+    },
     // Store anonymous messages within the session
     messages: [{
         sender: {

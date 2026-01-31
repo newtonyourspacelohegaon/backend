@@ -1,30 +1,34 @@
 const User = require('../models/User');
 const Like = require('../models/Like');
+const { logActivity } = require('../utils/activityLogger');
 
 // Constants
-const LIKE_REGEN_INTERVAL = 60 * 60 * 1000; // 1 hour in ms
-const MAX_FREE_LIKES = 5;
+const LIKE_REGEN_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_FREE_LIKES = 10;
 const COST_BUY_LIKES = 100; // coins for 5 likes
 const COST_REVEAL = 70;
 const COST_START_CHAT = 100;
 const COST_DIRECT_CHAT = 150;
-const COST_BUY_CHAT_SLOT = 100;
+const COST_BUY_CHAT_SLOT = 150;
+
+// Helper: Check if user has an active unlimited plan
+const hasUnlimitedCoins = (user) => {
+    return user.unlimitedCoinsExpiry && new Date(user.unlimitedCoinsExpiry) > new Date();
+};
 
 // Helper: Check and regenerate likes if eligible
 const regenerateLikes = async (user) => {
-    if (user.likes >= MAX_FREE_LIKES) return; // No regen if at or above max
-
     const now = new Date();
-    const timeSinceLastRegen = now - new Date(user.lastLikeRegenTime);
-    const hoursElapsed = Math.floor(timeSinceLastRegen / LIKE_REGEN_INTERVAL);
+    const lastRegen = new Date(user.lastLikeRegenTime);
+    const diff = now - lastRegen;
 
-    if (hoursElapsed > 0) {
-        const likesToAdd = Math.min(hoursElapsed, MAX_FREE_LIKES - user.likes);
-        if (likesToAdd > 0) {
-            user.likes += likesToAdd;
-            user.lastLikeRegenTime = now;
-            await user.save();
+    if (diff >= LIKE_REGEN_INTERVAL) {
+        // Daily refresh: If fewer than max, set to max. If more (bought), stay as is.
+        if (user.likes < MAX_FREE_LIKES) {
+            user.likes = MAX_FREE_LIKES;
         }
+        user.lastLikeRegenTime = now;
+        await user.save();
     }
 };
 
@@ -178,13 +182,23 @@ exports.revealProfile = async (req, res) => {
             return res.status(400).json({ message: 'Profile already revealed' });
         }
 
-        if (user.coins < COST_REVEAL) {
-            return res.status(400).json({ message: `Insufficient coins. Need ${COST_REVEAL} coins.` });
+        if (!hasUnlimitedCoins(user)) {
+            if (user.coins < COST_REVEAL) {
+                return res.status(400).json({ message: `Insufficient coins. Need ${COST_REVEAL} coins.` });
+            }
+            user.coins -= COST_REVEAL;
         }
-
-        // Deduct coins and update like status
-        user.coins -= COST_REVEAL;
         await user.save();
+
+        // Log deduction
+        if (!hasUnlimitedCoins(user)) {
+            await logActivity({
+                userId: req.user.id,
+                action: 'COINS_DEDUCTED',
+                details: { amount: COST_REVEAL, reason: 'Profile Reveal', likeId: req.params.likeId },
+                req
+            });
+        }
 
         like.status = 'revealed';
         like.revealedAt = new Date();
@@ -230,14 +244,24 @@ exports.startChat = async (req, res) => {
             return res.status(400).json({ message: 'No available chat slots. Buy more slots!' });
         }
 
-        if (user.coins < COST_START_CHAT) {
-            return res.status(400).json({ message: `Insufficient coins. Need ${COST_START_CHAT} coins.` });
+        if (!hasUnlimitedCoins(user)) {
+            if (user.coins < COST_START_CHAT) {
+                return res.status(400).json({ message: `Insufficient coins. Need ${COST_START_CHAT} coins.` });
+            }
+            user.coins -= COST_START_CHAT;
         }
-
-        // Deduct coins and update status
-        user.coins -= COST_START_CHAT;
         user.activeChatCount += 1;
         await user.save();
+
+        // Log deduction
+        if (!hasUnlimitedCoins(user)) {
+            await logActivity({
+                userId: req.user.id,
+                action: 'COINS_DEDUCTED',
+                details: { amount: COST_START_CHAT, reason: 'Start Chat from Like', likeId: req.params.likeId },
+                req
+            });
+        }
 
         like.status = 'chatting';
         like.chatStartedAt = new Date();
@@ -279,14 +303,24 @@ exports.directChat = async (req, res) => {
             return res.status(400).json({ message: 'No available chat slots. Buy more slots!' });
         }
 
-        if (user.coins < COST_DIRECT_CHAT) {
-            return res.status(400).json({ message: `Insufficient coins. Need ${COST_DIRECT_CHAT} coins.` });
+        if (!hasUnlimitedCoins(user)) {
+            if (user.coins < COST_DIRECT_CHAT) {
+                return res.status(400).json({ message: `Insufficient coins. Need ${COST_DIRECT_CHAT} coins.` });
+            }
+            user.coins -= COST_DIRECT_CHAT;
         }
-
-        // Deduct coins and update status
-        user.coins -= COST_DIRECT_CHAT;
         user.activeChatCount += 1;
         await user.save();
+
+        // Log deduction
+        if (!hasUnlimitedCoins(user)) {
+            await logActivity({
+                userId: req.user.id,
+                action: 'COINS_DEDUCTED',
+                details: { amount: COST_DIRECT_CHAT, reason: 'Direct Chat (Reveal + Chat)', likeId: req.params.likeId },
+                req
+            });
+        }
 
         like.status = 'chatting';
         like.revealedAt = new Date();
@@ -316,13 +350,24 @@ exports.buyLikes = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
 
-        if (user.coins < COST_BUY_LIKES) {
-            return res.status(400).json({ message: `Insufficient coins. Need ${COST_BUY_LIKES} coins.` });
+        if (!hasUnlimitedCoins(user)) {
+            if (user.coins < COST_BUY_LIKES) {
+                return res.status(400).json({ message: `Insufficient coins. Need ${COST_BUY_LIKES} coins.` });
+            }
+            user.coins -= COST_BUY_LIKES;
         }
-
-        user.coins -= COST_BUY_LIKES;
         user.likes += 5;
         await user.save();
+
+        // Log deduction
+        if (!hasUnlimitedCoins(user)) {
+            await logActivity({
+                userId: req.user.id,
+                action: 'COINS_DEDUCTED',
+                details: { amount: COST_BUY_LIKES, reason: 'Purchased 5 Likes' },
+                req
+            });
+        }
 
         res.json({
             success: true,
@@ -342,13 +387,25 @@ exports.buyChatSlot = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
 
-        if (user.coins < COST_BUY_CHAT_SLOT) {
-            return res.status(400).json({ message: `Insufficient coins. Need ${COST_BUY_CHAT_SLOT} coins.` });
+        // Check for unlimited plan bypass
+        if (!hasUnlimitedCoins(user)) {
+            if (user.coins < COST_BUY_CHAT_SLOT) {
+                return res.status(400).json({ message: `Insufficient coins. Need ${COST_BUY_CHAT_SLOT} coins.` });
+            }
+            user.coins -= COST_BUY_CHAT_SLOT;
         }
-
-        user.coins -= COST_BUY_CHAT_SLOT;
         user.chatSlots += 1;
         await user.save();
+
+        // Log deduction
+        if (!hasUnlimitedCoins(user)) {
+            await logActivity({
+                userId: req.user.id,
+                action: 'COINS_DEDUCTED',
+                details: { amount: COST_BUY_CHAT_SLOT, reason: 'Purchased 1 Chat Slot' },
+                req
+            });
+        }
 
         res.json({
             success: true,
@@ -398,21 +455,36 @@ exports.getActiveChats = async (req, res) => {
             $or: [{ sender: userId }, { receiver: userId }],
         })
             .populate('sender', 'fullName username profileImage datingPhotos')
-            .populate('receiver', 'fullName username profileImage datingPhotos')
-            .sort({ chatStartedAt: -1 });
+            .populate('receiver', 'fullName username profileImage datingPhotos');
 
-        // Format response to show the "other" person
-        const chatList = chats.map(chat => {
+        // Get last messages for each chat for sorting and display
+        const Message = require('../models/Message');
+        const chatList = await Promise.all(chats.map(async chat => {
             const isMyLike = chat.sender._id.toString() === userId;
             const partner = isMyLike ? chat.receiver : chat.sender;
+
+            const lastMsg = await Message.findOne({
+                $or: [
+                    { sender: userId, receiver: partner._id },
+                    { sender: partner._id, receiver: userId }
+                ]
+            }).sort({ createdAt: -1 });
+
             return {
                 likeId: chat._id,
                 partnerId: partner._id,
                 partnerName: partner.fullName || partner.username,
                 partnerImage: partner.datingPhotos?.[0] || partner.profileImage,
                 chatStartedAt: chat.chatStartedAt,
+                lastMessageTime: lastMsg ? lastMsg.createdAt : chat.chatStartedAt,
+                lastMessageText: lastMsg ? lastMsg.text : 'Start chatting!',
+                unreadCount: lastMsg && lastMsg.receiver.toString() === userId && !lastMsg.read ? 1 : 0,
+                isBlindMatch: chat.isBlindMatch || false,
             };
-        });
+        }));
+
+        // Sort by most recent interaction (latest message or chat start)
+        chatList.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
 
         res.json(chatList);
     } catch (error) {

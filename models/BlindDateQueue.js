@@ -24,6 +24,6 @@ const blindDateQueueSchema = new mongoose.Schema({
 });
 
 // TTL index - auto-remove from queue after 10 minutes of waiting
-blindDateQueueSchema.index({ joinedAt: 1 }, { expireAfterSeconds: 600 });
+blindDateQueueSchema.index({ joinedAt: 1 }, { expireAfterSeconds: 300 });
 
 module.exports = mongoose.model('BlindDateQueue', blindDateQueueSchema);
