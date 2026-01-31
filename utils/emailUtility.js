@@ -1,6 +1,34 @@
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 
-const sendOTPEmail = async (email, otp) => {
+/**
+ * Enhanced Email Utility
+ * @param {string} email - Recipient
+ * @param {string} otp - Code
+ * @param {boolean} forceDirect - If true, bypasses the microservice routing (used inside the Vercel microservice itself)
+ */
+const sendOTPEmail = async (email, otp, forceDirect = false) => {
+    // 1. Check if we should forward to Vercel (if on Render)
+    const isRender = process.env.RENDER === 'true' || process.env.IS_RENDER === 'true';
+    const vercelUrl = process.env.VERCEL_MAIL_SERVICE_URL; // e.g., https://backend-ten-gamma-60.vercel.app
+
+    if (isRender && !forceDirect && vercelUrl) {
+        try {
+            console.log(`[SMTP_ROUTING] On Render, forwarding mail request for ${email} to Vercel...`);
+            const response = await axios.post(`${vercelUrl}/api/mail/send-otp`, {
+                email,
+                otp,
+                internalSecret: process.env.INTERNAL_SERVICE_SECRET
+            });
+            console.log(`[SMTP_ROUTING] Vercel responded:`, response.data);
+            return true;
+        } catch (error) {
+            console.error(`[SMTP_ROUTING] Failed to forward to Vercel:`, error.response?.data || error.message);
+            // Fallback to local SMTP if forward fails (though it likely won't work on Render)
+        }
+    }
+
+    // 2. Original SMTP Logic (Runs on Vercel or as fallback)
     try {
         // For production, you should use a real SMTP service (Gmail, SendGrid, Mailtrap, etc.)
         // We'll try to use environment variables first, then fallback to a mock for demo
@@ -18,22 +46,32 @@ const sendOTPEmail = async (email, otp) => {
                     user: process.env.SMTP_USER,
                     pass: process.env.SMTP_PASS,
                 },
-                debug: true,
-                logger: true,
+                debug: process.env.NODE_ENV !== 'production',
+                logger: process.env.NODE_ENV !== 'production',
                 connectionTimeout: 20000, // 20 seconds
                 greetingTimeout: 20000,
                 socketTimeout: 30000,
             };
 
+            // Use 'service: gmail' if it's gmail for extra reliability where available
+            if (process.env.SMTP_HOST.includes('gmail.com')) {
+                transportConfig.service = 'gmail';
+                delete transportConfig.host;
+                delete transportConfig.port;
+                delete transportConfig.secure;
+            }
+
             transporter = nodemailer.createTransport(transportConfig);
 
-            // Verify connection configuration on startup
-            try {
-                await transporter.verify();
-                console.log('[SMTP] Verification successful!');
-            } catch (verifyError) {
-                console.error('[SMTP] Verification failed:', verifyError.message);
-                // We'll still try to send later, but this log is crucial for debugging
+            // Verify connection configuration on startup (only in non-production)
+            if (process.env.NODE_ENV !== 'production') {
+                try {
+                    await transporter.verify();
+                    console.log('[SMTP] Verification successful!');
+                } catch (verifyError) {
+                    console.error('[SMTP] Verification failed:', verifyError.message);
+                    // We'll still try to send later, but this log is crucial for debugging
+                }
             }
         } else {
             // MOCK implementation for demo if no SMTP is configured
