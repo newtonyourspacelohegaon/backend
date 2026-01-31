@@ -446,4 +446,9 @@ router.delete('/users/:id', protect, isAdmin, async (req, res) => {
     }
 });
 
+// @desc    Send broadcast notification
+// @route   POST /api/admin/notifications/broadcast
+const { sendBroadcast } = require('../controllers/notificationController');
+router.post('/notifications/broadcast', protect, isAdmin, sendBroadcast);
+
 module.exports = router;

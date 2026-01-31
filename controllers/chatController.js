@@ -1,6 +1,7 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activityLogger');
+const { notifyUser } = require('../utils/pushService');
 
 // @desc    Send a message
 // @route   POST /api/chat/send
@@ -20,6 +21,19 @@ exports.sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
+
+    // Send push notification to receiver
+    const sender = await User.findById(senderId).select('fullName username');
+    const senderName = sender?.fullName || sender?.username || 'Someone';
+    const preview = text.length > 50 ? text.substring(0, 50) + '...' : text;
+
+    notifyUser(
+      receiverId,
+      'New Message 💬',
+      `${senderName}: ${preview}`,
+      { type: 'chat', chatUserId: senderId },
+      'chat'
+    );
 
     res.json(newMessage);
   } catch (error) {

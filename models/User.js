@@ -57,6 +57,15 @@ const userSchema = new mongoose.Schema({
     default: false,
   },
 
+  isStudentVerified: {
+    type: Boolean,
+    default: false,
+  },
+  studentEmail: {
+    type: String,
+    sparse: true,
+  },
+
   // Dating Mode Profile Fields
   datingTermsAccepted: {
     type: Boolean,
@@ -103,6 +112,11 @@ const userSchema = new mongoose.Schema({
     default: 0,
   },
   unlimitedCoinsExpiry: Date, // Expiry timestamp for unlimited plan
+
+  expoPushToken: {
+    type: String,
+    sparse: true,
+  },
 
   createdAt: {
     type: Date,

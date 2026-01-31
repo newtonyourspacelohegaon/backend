@@ -48,6 +48,9 @@ app.use('/api/update', updateRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 
+const notificationRoutes = require('./routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+
 // Database Connection
 mongoose
   .connect(process.env.MONGO_URI)

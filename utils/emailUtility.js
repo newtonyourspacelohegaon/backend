@@ -109,4 +109,13 @@ const sendOTPEmail = async (email, otp, forceDirect = false) => {
     }
 };
 
-module.exports = { sendOTPEmail };
+/**
+ * Send College Verification Email
+ * @param {string} email - College email address
+ * @param {string} otp - Verification Code
+ */
+const sendCollegeVerificationEmail = async (email, otp) => {
+    return await sendOTPEmail(email, otp); // Re-use the nice OTP template
+};
+
+module.exports = { sendOTPEmail, sendCollegeVerificationEmail };

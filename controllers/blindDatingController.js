@@ -1,6 +1,7 @@
 const BlindDateSession = require('../models/BlindDateSession');
 const BlindDateQueue = require('../models/BlindDateQueue');
 const User = require('../models/User');
+const { notifyUser } = require('../utils/pushService');
 
 const SESSION_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 const REVEAL_COST = 70;
@@ -62,6 +63,22 @@ exports.joinQueue = async (req, res) => {
                 expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
             });
             await session.save();
+
+            // Send push notifications to both users
+            notifyUser(
+                userId,
+                'Blind Date! 🎭',
+                'Your blind date is ready! Start chatting anonymously.',
+                { type: 'blind', sessionId: session._id.toString() },
+                'blind'
+            );
+            notifyUser(
+                match.user,
+                'Blind Date! 🎭',
+                'Your blind date is ready! Start chatting anonymously.',
+                { type: 'blind', sessionId: session._id.toString() },
+                'blind'
+            );
 
             return res.json({
                 status: 'matched',

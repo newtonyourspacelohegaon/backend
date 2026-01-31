@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Like = require('../models/Like');
 const { logActivity } = require('../utils/activityLogger');
+const { notifyUser } = require('../utils/pushService');
 
 // Constants
 const LIKE_REGEN_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
@@ -103,6 +104,22 @@ exports.sendLike = async (req, res) => {
             await user.save();
             await User.findByIdAndUpdate(targetUserId, { $inc: { activeChatCount: 1 } });
 
+            // Send mutual vibe notification to both users
+            notifyUser(
+                targetUserId,
+                "It's a Vibe! 💚",
+                `You matched with ${user.fullName || 'someone'}!`,
+                { type: 'match', matchId: reciprocalLike._id.toString() },
+                'match'
+            );
+            notifyUser(
+                req.user.id,
+                "It's a Vibe! 💚",
+                `You matched with ${(await User.findById(targetUserId).select('fullName')).fullName || 'someone'}!`,
+                { type: 'match', matchId: reciprocalLike._id.toString() },
+                'match'
+            );
+
             return res.json({
                 success: true,
                 likes: user.likes,
@@ -112,7 +129,7 @@ exports.sendLike = async (req, res) => {
         }
 
         // Create new like
-        await Like.create({
+        const newLike = await Like.create({
             sender: req.user.id,
             receiver: targetUserId,
         });
@@ -120,6 +137,15 @@ exports.sendLike = async (req, res) => {
         // Deduct like
         user.likes -= 1;
         await user.save();
+
+        // Send push notification for new like
+        notifyUser(
+            targetUserId,
+            'New Like! ❤️',
+            'Someone likes your vibe! Check it out.',
+            { type: 'like', likeId: newLike._id.toString() },
+            'like'
+        );
 
         res.json({
             success: true,

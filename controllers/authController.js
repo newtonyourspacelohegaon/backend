@@ -8,7 +8,8 @@ const generateToken = (id) => {
   });
 };
 
-const { sendOTPEmail } = require('../utils/emailUtility');
+const { sendOTPEmail, sendCollegeVerificationEmail } = require('../utils/emailUtility');
+const { logActivity } = require('../utils/activityLogger');
 
 // OTP Store (In-memory for demo, use Redis/DB for production)
 const otpStore = new Map();
@@ -118,3 +119,104 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 
+
+// @desc    Send College Verification OTP
+// @route   POST /api/auth/college-verify/send
+exports.sendCollegeVerification = async (req, res) => {
+  const { email } = req.body;
+  const userId = req.user.id;
+
+  if (!email || !email.toLowerCase().endsWith('@adypu.edu.in')) {
+    return res.status(400).json({ message: 'Please use your valid @adypu.edu.in email address.' });
+  }
+
+  // Check if already used by another user
+  const existingUser = await User.findOne({ studentEmail: email, isStudentVerified: true });
+  if (existingUser && existingUser._id.toString() !== userId) {
+    return res.status(400).json({ message: 'This email is already linked to another verified account.' });
+  }
+
+  const otp = generateOTP();
+
+  // Store OTP with expiry (10 minutes)
+  otpStore.set(email, {
+    otp,
+    expiry: Date.now() + 10 * 60 * 1000,
+    userId // Bind to current user
+  });
+
+  const emailSent = await sendCollegeVerificationEmail(email, otp);
+  if (!emailSent) {
+    return res.status(500).json({ message: 'Failed to send verification email' });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Verification code sent to ${email}`,
+    otp: process.env.NODE_ENV === 'development' ? otp : undefined
+  });
+};
+
+// @desc    Verify College OTP
+// @route   POST /api/auth/college-verify/verify
+exports.verifyCollegeEmail = async (req, res) => {
+  const { email, otp } = req.body;
+  const userId = req.user.id; // Protected route
+
+  const storedData = otpStore.get(email);
+
+  if (!storedData) {
+    return res.status(400).json({ message: 'OTP expired or not requested' });
+  }
+
+  if (storedData.expiry < Date.now()) {
+    otpStore.delete(email);
+    return res.status(400).json({ message: 'OTP expired' });
+  }
+
+  if (storedData.otp !== otp) {
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  // Ensure the user verifying is the one who requested it (security)
+  if (storedData.userId !== userId) {
+    return res.status(403).json({ message: 'Verification session mismatch' });
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.isStudentVerified) {
+      return res.status(400).json({ message: 'You are already verified!' });
+    }
+
+    // Success! Update User
+    user.isStudentVerified = true;
+    user.studentEmail = email;
+    user.coins += 200; // Bonus
+    await user.save();
+
+    // Log activity
+    await logActivity({
+      userId: user._id,
+      action: 'COLLEGE_VERIFIED',
+      details: { email, bonus: 200 },
+      req
+    });
+
+    // Clear OTP
+    otpStore.delete(email);
+
+    res.json({
+      success: true,
+      coins: user.coins,
+      isStudentVerified: true,
+      message: 'Verification successful! You earned 200 coins and a badge.'
+    });
+
+  } catch (error) {
+    console.error('College verify error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
