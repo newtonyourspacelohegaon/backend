@@ -287,84 +287,95 @@ exports.getAllUsers = async (req, res) => {
     console.error('getAllUsers error:', error);
     res.status(500).json({ message: 'Server Error' });
   }
-  // @desc    Reset Dating Profile (User)
-  // @route   POST /api/users/profile/reset-dating
-  exports.resetDatingProfile = async (req, res) => {
-    try {
-      const user = await User.findById(req.user.id);
-      if (!user) return res.status(404).json({ message: 'User not found' });
-
-      // Reset all dating fields
-      user.datingProfileComplete = false;
-      user.datingTermsAccepted = false;
-      user.datingTermsAcceptedAt = undefined;
-
-      user.datingGender = undefined;
-      user.datingLookingFor = undefined;
-      user.datingAge = undefined;
-      user.datingHeight = undefined;
-      user.datingHometown = undefined;
-      user.datingCollege = undefined;
-      user.datingCourse = undefined;
-      user.datingIntentions = [];
-      user.datingBio = undefined;
-      user.datingInterests = [];
-      user.datingPhotos = [];
-
-      await user.save();
-
-      // Remove from Blind Date Queue if present
-      await require('../models/BlindDateQueue').deleteMany({ user: user._id });
-
-      res.json({ message: 'Dating profile reset successfully' });
-    } catch (error) {
-      console.error('Reset dating profile error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  };
-
-  // @desc    Reset Dating Profile (Admin)
-  // @route   POST /api/admin/users/:id/reset-dating
-  exports.adminResetDatingProfile = async (req, res) => {
-    try {
-      const user = await User.findById(req.params.id);
-      if (!user) return res.status(404).json({ message: 'User not found' });
-
-      // Reset all dating fields
-      user.datingProfileComplete = false;
-      user.datingTermsAccepted = false;
-      user.datingTermsAcceptedAt = undefined;
-
-      user.datingGender = undefined;
-      user.datingLookingFor = undefined;
-      user.datingAge = undefined;
-      user.datingHeight = undefined;
-      user.datingHometown = undefined;
-      user.datingCollege = undefined;
-      user.datingCourse = undefined;
-      user.datingIntentions = [];
-      user.datingBio = undefined;
-      user.datingInterests = [];
-      user.datingPhotos = [];
-
-      await user.save();
-
-      // Remove from Blind Date Queue if present
-      await require('../models/BlindDateQueue').deleteMany({ user: user._id });
-
-      await require('../utils/activityLogger').logActivity({
-        action: 'ADMIN_RESET_DATING_PROFILE',
-        details: {
-          targetUserId: user._id,
-          targetUsername: user.username
+};
+// @desc    Reset Dating Profile (User)
+// @route   POST /api/users/profile/reset-dating
+exports.resetDatingProfile = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        $set: {
+          datingProfileComplete: false,
+          datingTermsAccepted: false,
+          datingIntentions: [],
+          datingInterests: [],
+          datingPhotos: []
         },
-        req,
-        performedBy: req.user.id,
-      });
+        $unset: {
+          datingTermsAcceptedAt: 1,
+          datingGender: 1,
+          datingLookingFor: 1,
+          datingAge: 1,
+          datingHeight: 1,
+          datingHometown: 1,
+          datingCollege: 1,
+          datingCourse: 1,
+          datingBio: 1,
+        }
+      },
+      { new: true }
+    );
 
-      res.json({ message: 'User dating profile reset successfully', user });
-    } catch (error) {
-      console.error('Admin reset dating profile error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  };
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Remove from Blind Date Queue if present
+    await require('../models/BlindDateQueue').deleteMany({ user: user._id });
+
+    res.json({ success: true, message: 'Dating profile reset successfully' });
+  } catch (error) {
+    console.error('Reset dating profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Reset Dating Profile (Admin)
+// @route   POST /api/admin/users/:id/reset-dating
+exports.adminResetDatingProfile = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          datingProfileComplete: false,
+          datingTermsAccepted: false,
+          datingIntentions: [],
+          datingInterests: [],
+          datingPhotos: []
+        },
+        $unset: {
+          datingTermsAcceptedAt: 1,
+          datingGender: 1,
+          datingLookingFor: 1,
+          datingAge: 1,
+          datingHeight: 1,
+          datingHometown: 1,
+          datingCollege: 1,
+          datingCourse: 1,
+          datingBio: 1,
+        }
+      },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Remove from Blind Date Queue if present
+    await require('../models/BlindDateQueue').deleteMany({ user: user._id });
+
+    await require('../utils/activityLogger').logActivity({
+      action: 'ADMIN_RESET_DATING_PROFILE',
+      details: {
+        targetUserId: user._id,
+        targetUsername: user.username
+      },
+      req,
+      performedBy: req.user.id,
+    });
+
+    res.json({ success: true, message: 'User dating profile reset successfully', user });
+  } catch (error) {
+    console.error('Admin reset dating profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
