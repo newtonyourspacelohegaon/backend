@@ -126,7 +126,7 @@ exports.checkUsername = async (req, res) => {
 // @route   PATCH /api/users/profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { username, fullName, age, bio, college, year, major, interests, profileImage } = req.body;
+    const { username, fullName, age, bio, college, year, major, interests, profileImage, coverImage } = req.body;
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -155,6 +155,9 @@ exports.updateProfile = async (req, res) => {
 
     if (profileImage) {
       user.profileImage = profileImage;
+    }
+    if (coverImage) {
+      user.coverImage = coverImage;
     }
 
     await user.save();

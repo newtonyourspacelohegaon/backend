@@ -307,6 +307,19 @@ exports.extendSession = async (req, res) => {
         session.expiresAt = new Date(Date.now() + EXTENSION_DURATION_MS);
         await session.save();
 
+        // Log the activity
+        const { logActivity } = require('../utils/activityLogger');
+        await logActivity({
+            userId,
+            action: 'COINS_DEDUCTED',
+            details: {
+                amount: EXTENSION_COST,
+                reason: 'Blind Date Session Extension',
+                sessionId: session._id
+            },
+            req
+        });
+
         // Get partner's profile for reveal
         const partnerId = session.user1.toString() === userId ? session.user2 : session.user1;
         const partner = await User.findById(partnerId).select(

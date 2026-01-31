@@ -12,12 +12,6 @@ const userSchema = new mongoose.Schema({
     index: true,
     sparse: true,
   },
-  googleId: {
-    type: String,
-    unique: true,
-    index: true,
-    sparse: true,
-  },
   username: {
     type: String,
     unique: true,
@@ -35,6 +29,7 @@ const userSchema = new mongoose.Schema({
   major: String,
   bio: String,
   profileImage: String,
+  coverImage: String,
   interests: [String],
   coins: {
     type: Number,
@@ -54,6 +49,10 @@ const userSchema = new mongoose.Schema({
     ref: 'User'
   }],
   isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  isBanned: {
     type: Boolean,
     default: false,
   },

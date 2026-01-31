@@ -62,6 +62,19 @@ exports.switchMatch = async (req, res) => {
     await user.save();
     await targetUser.save();
 
+    // Log the activity
+    const { logActivity } = require('../utils/activityLogger');
+    await logActivity({
+      userId: req.user.id,
+      action: 'COINS_DEDUCTED',
+      details: {
+        amount: 100,
+        reason: 'Switch Match (Vibe Switch)',
+        targetUserId
+      },
+      req
+    });
+
     res.json({ success: true, coins: user.coins, message: 'Vibe switched successfully!' });
   } catch (error) {
     console.error('switchMatch error:', error);
@@ -79,9 +92,34 @@ exports.buyCoins = async (req, res) => {
       return res.status(400).json({ message: 'Invalid amount' });
     }
 
+    const price = amount / 10; // Simple conversion for simulation (10 coins per INR)
+
     const user = await User.findById(req.user.id);
     user.coins += amount;
     await user.save();
+
+    // Create Transaction record
+    const Transaction = require('../models/Transaction');
+    await Transaction.create({
+      user: user._id,
+      amount,
+      price,
+      status: 'completed',
+      paymentMethod: 'Simulated'
+    });
+
+    // Log the activity
+    const { logActivity } = require('../utils/activityLogger');
+    await logActivity({
+      userId: user._id,
+      action: 'COINS_ADDED',
+      details: {
+        amount,
+        price,
+        reason: 'Purchase'
+      },
+      req
+    });
 
     res.json({ success: true, coins: user.coins, message: `Added ${amount} coins!` });
   } catch (error) {

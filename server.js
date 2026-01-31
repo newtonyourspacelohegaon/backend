@@ -33,6 +33,7 @@ const uploadRoutes = require('./routes/upload');
 const storyRoutes = require('./routes/storyRoutes');
 const updateRoutes = require('./routes/updateRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -45,6 +46,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/update', updateRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // Database Connection
 mongoose

@@ -8,64 +8,104 @@ const generateToken = (id) => {
   });
 };
 
-// @desc    Send OTP (Simulated for Demo)
+const { sendOTPEmail } = require('../utils/emailUtility');
+
+// OTP Store (In-memory for demo, use Redis/DB for production)
+const otpStore = new Map();
+
+// Helper to generate 6-digit random OTP
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// @desc    Send OTP
 // @route   POST /api/auth/send-otp
 exports.sendOtp = async (req, res) => {
-  const { phoneNumber } = req.body;
+  const { phoneNumber, email } = req.body;
 
-  if (!phoneNumber) {
-    return res.status(400).json({ message: 'Phone number is required' });
+  if (!phoneNumber && !email) {
+    return res.status(400).json({ message: 'Phone number or email is required' });
   }
 
-  // In production, integrate Twilio/Fast2SMS here
-  // For demo, we'll just return success and use a fixed OTP '123456'
+  if (email && !email.toLowerCase().endsWith('@adypu.edu.in')) {
+    return res.status(400).json({ message: 'Only @adypu.edu.in emails are allowed' });
+  }
 
-  console.log(`OTP for ${phoneNumber}: 123456`);
+  const otp = generateOTP();
+  const target = phoneNumber || email;
+
+  // Store OTP with expiry (10 minutes)
+  otpStore.set(target, {
+    otp,
+    expiry: Date.now() + 10 * 60 * 1000
+  });
+
+  if (email) {
+    const emailSent = await sendOTPEmail(email, otp);
+    if (!emailSent) {
+      return res.status(500).json({ message: 'Failed to send OTP email' });
+    }
+  } else {
+    // In production, integrate Twilio/Fast2SMS here
+    console.log(`[SMS MOCK] OTP for ${phoneNumber}: ${otp}`);
+  }
 
   res.status(200).json({
     success: true,
     message: 'OTP sent successfully',
-    otp: '123456' // Sending back for easier testing
+    otp: process.env.NODE_ENV === 'development' || !email ? otp : undefined
   });
 };
 
-const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(); // Initialize without ID to avoid default audience check conflict
 
 // @desc    Verify OTP and Login/Register
 // @route   POST /api/auth/verify-otp
 exports.verifyOtp = async (req, res) => {
-  const { phoneNumber, otp } = req.body;
+  const { phoneNumber, email, otp } = req.body;
 
-  if (!phoneNumber || !otp) {
-    return res.status(400).json({ message: 'Phone number and OTP are required' });
+  if ((!phoneNumber && !email) || !otp) {
+    return res.status(400).json({ message: 'Phone/Email and OTP are required' });
   }
 
-  // Fixed OTP Check
-  if (otp !== '123456') {
+  const target = phoneNumber || email;
+  const storedData = otpStore.get(target);
+
+  if (!storedData) {
+    return res.status(400).json({ message: 'OTP expired or not requested' });
+  }
+
+  if (storedData.expiry < Date.now()) {
+    otpStore.delete(target);
+    return res.status(400).json({ message: 'OTP expired' });
+  }
+
+  if (storedData.otp !== otp) {
     return res.status(400).json({ message: 'Invalid OTP' });
   }
 
+  // Clear OTP after successful verification
+  otpStore.delete(target);
+
   try {
     // Check if user exists
-    let user = await User.findOne({ phoneNumber });
+    let query = phoneNumber ? { phoneNumber } : { email };
+    let user = await User.findOne(query);
 
     let isNewUser = false;
     if (!user) {
       // Register new user
-      user = await User.create({
-        phoneNumber,
-      });
+      user = await User.create(phoneNumber ? { phoneNumber } : { email });
       isNewUser = true;
     }
 
     res.status(200).json({
       success: true,
       token: generateToken(user._id),
-      isNewUser: isNewUser,
+      isNewUser: isNewUser || !user.username, // Treat as new if profile not finished
       user: {
         id: user._id,
         phoneNumber: user.phoneNumber,
+        email: user.email,
         username: user.username,
         fullName: user.fullName,
         profileImage: user.profileImage,
@@ -78,77 +118,3 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 
-// @desc    Google Login
-// @route   POST /api/auth/google
-exports.googleLogin = async (req, res) => {
-  const { idToken } = req.body;
-
-  if (!idToken) {
-    return res.status(400).json({ message: 'ID Token is required' });
-  }
-
-  try {
-    // Accept tokens from multiple client IDs (Web, Android, iOS)
-    const audiences = [
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_ANDROID_CLIENT_ID,
-      '560227419750-6vpcqgo8l2uopfg9e4j24dq7102dkb5i.apps.googleusercontent.com', // Explicit Web ID
-      '560227419750-45vcnpoiog5k2unnrc057caaq6s5imp4.apps.googleusercontent.com'  // Explicit Android ID
-    ].filter(Boolean); // Remove null/undefined values
-
-    console.log('Verifying Google token with audiences:', audiences);
-
-    // Verify the ID token using Google's client library
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: audiences,
-    });
-
-    const payload = ticket.getPayload();
-    const { sub: googleId, email, name, picture } = payload;
-
-    // Check if user exists by googleId OR email
-    let user = await User.findOne({ $or: [{ googleId }, { email }] });
-
-    let isNewUser = false;
-    if (!user) {
-      // Create new user
-      user = await User.create({
-        googleId,
-        email,
-        fullName: name,
-        profileImage: picture,
-      });
-      isNewUser = true;
-    } else {
-      // If user exists but doesn't have googleId linked yet
-      if (!user.googleId) {
-        user.googleId = googleId;
-        await user.save();
-      }
-
-      // KEY FIX: If user exists but hasn't completed setup (no username), treat as new user
-      if (!user.username) {
-        isNewUser = true;
-      }
-    }
-
-    res.status(200).json({
-      success: true,
-      token: generateToken(user._id),
-      isNewUser,
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        fullName: user.fullName,
-        profileImage: user.profileImage,
-        coins: user.coins
-      },
-    });
-  } catch (error) {
-    console.error('Google Auth Error:', error.message);
-    // Return the specific error message to help debug (e.g. "Wrong audience")
-    res.status(401).json({ message: `Invalid Google Token: ${error.message}` });
-  }
-};
