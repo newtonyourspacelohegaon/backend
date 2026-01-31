@@ -8,15 +8,39 @@ const sendOTPEmail = async (email, otp) => {
         let transporter;
 
         if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST,
-                port: process.env.SMTP_PORT || 587,
-                secure: process.env.SMTP_PORT == 465,
+            console.log(`[SMTP] Attempting connection to ${process.env.SMTP_HOST}...`);
+
+            const transportConfig = {
+                service: 'gmail',
                 auth: {
                     user: process.env.SMTP_USER,
                     pass: process.env.SMTP_PASS,
                 },
-            });
+                debug: true, // Enable debug output
+                logger: true, // Log to console
+                connectionTimeout: 15000, // 15 seconds
+                greetingTimeout: 15000,
+                socketTimeout: 30000,
+            };
+
+            // Only use custom host/port if NOT using Gmail service shortcut
+            if (!process.env.SMTP_HOST.includes('gmail.com')) {
+                delete transportConfig.service;
+                transportConfig.host = process.env.SMTP_HOST;
+                transportConfig.port = parseInt(process.env.SMTP_PORT) || 587;
+                transportConfig.secure = transportConfig.port === 465;
+            }
+
+            transporter = nodemailer.createTransport(transportConfig);
+
+            // Verify connection configuration on startup
+            try {
+                await transporter.verify();
+                console.log('[SMTP] Verification successful!');
+            } catch (verifyError) {
+                console.error('[SMTP] Verification failed:', verifyError.message);
+                // We'll still try to send later, but this log is crucial for debugging
+            }
         } else {
             // MOCK implementation for demo if no SMTP is configured
             console.log('-----------------------------------------');
