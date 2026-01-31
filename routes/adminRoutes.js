@@ -232,6 +232,10 @@ router.patch('/users/:id', protect, isAdmin, async (req, res) => {
     }
 });
 
+// @desc    Reset User Dating Profile (Admin)
+// @route   POST /api/admin/users/:id/reset-dating
+router.post('/users/:id/reset-dating', protect, isAdmin, require('../controllers/userController').adminResetDatingProfile);
+
 // @desc    Add Coins to User
 // @route   POST /api/admin/users/:id/add-coins
 router.post('/users/:id/add-coins', protect, isAdmin, async (req, res) => {

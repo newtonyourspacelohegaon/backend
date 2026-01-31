@@ -5,6 +5,7 @@ const { protect } = require('../middleware/authMiddleware');
 
 router.get('/me', protect, getMe);
 router.patch('/profile', protect, updateProfile);
+router.post('/profile/reset-dating', protect, require('../controllers/userController').resetDatingProfile);
 router.delete('/profile', protect, deleteAccount);
 router.post('/check-username', checkUsername);
 router.get('/search', protect, searchUsers);
