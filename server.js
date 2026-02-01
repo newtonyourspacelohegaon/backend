@@ -11,6 +11,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
   origin: true, // Reflect request origin to support credentials

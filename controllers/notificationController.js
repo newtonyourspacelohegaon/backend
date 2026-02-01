@@ -11,12 +11,20 @@ exports.registerPushToken = async (req, res) => {
         const { token } = req.body;
         const userId = req.user.id;
 
+        console.log(`[Push Registration] Intent for User: ${userId}, Token: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
+
         if (!token) {
             return res.status(400).json({ message: 'Push token is required' });
         }
 
-        await User.findByIdAndUpdate(userId, { expoPushToken: token });
+        const user = await User.findByIdAndUpdate(userId, { expoPushToken: token }, { new: true });
 
+        if (!user) {
+            console.log(`[Push Registration] User NOT FOUND: ${userId}`);
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        console.log(`[Push Registration] SUCCESS for ${user.username} (${userId})`);
         res.json({ success: true, message: 'Push token registered' });
     } catch (error) {
         console.error('Register push token error:', error);
