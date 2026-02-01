@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 const { logActivity } = require('../utils/activityLogger');
 const { notifyUser } = require('../utils/pushService');
 const { checkFirstChatReward } = require('./rewardController');
@@ -13,6 +14,10 @@ exports.sendMessage = async (req, res) => {
 
     if (!receiverId || !text) {
       return res.status(400).json({ message: 'Receiver and text are required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(receiverId)) {
+      return res.status(400).json({ message: 'Invalid receiver ID' });
     }
 
     const newMessage = new Message({
@@ -54,6 +59,10 @@ exports.getMessages = async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.user.id;
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
     const messages = await Message.find({
       $or: [
         { sender: currentUserId, receiver: userId },
@@ -75,6 +84,10 @@ exports.markAsRead = async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.user.id;
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
     await Message.updateMany(
       { sender: userId, receiver: currentUserId, read: false },
       { $set: { read: true, readAt: new Date() } }
@@ -93,6 +106,10 @@ exports.deleteConversation = async (req, res) => {
   try {
     const { userId } = req.params;
     const currentUserId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
 
     // Delete all messages between these two users
     await Message.deleteMany({
