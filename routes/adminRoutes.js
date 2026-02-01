@@ -451,4 +451,98 @@ router.delete('/users/:id', protect, isAdmin, async (req, res) => {
 const { sendBroadcast } = require('../controllers/notificationController');
 router.post('/notifications/broadcast', protect, isAdmin, sendBroadcast);
 
+// ============ SETTINGS MANAGEMENT ============
+
+const Settings = require('../models/Settings');
+
+// @desc    Get All Settings
+// @route   GET /api/admin/settings
+router.get('/settings', protect, isAdmin, async (req, res) => {
+    try {
+        const settings = await Settings.find();
+        // Convert to key-value object for easier frontend use
+        const settingsObj = {};
+        settings.forEach(s => { settingsObj[s.key] = s.value; });
+        res.json(settingsObj);
+    } catch (error) {
+        console.error('Get settings error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @desc    Update Settings
+// @route   PATCH /api/admin/settings
+router.patch('/settings', protect, isAdmin, async (req, res) => {
+    try {
+        const updates = req.body; // { key: value, key2: value2, ... }
+        const results = [];
+
+        for (const [key, value] of Object.entries(updates)) {
+            const updated = await Settings.set(key, value);
+            results.push(updated);
+        }
+
+        await logActivity({
+            action: 'ADMIN_UPDATED_SETTINGS',
+            details: updates,
+            req,
+            performedBy: req.user.id,
+        });
+
+        res.json({ message: 'Settings updated', settings: results });
+    } catch (error) {
+        console.error('Update settings error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// ============ ACTIVE CHATS MONITORING ============
+
+const Message = require('../models/Message');
+
+// @desc    Get All Active Chats (for monitoring)
+// @route   GET /api/admin/chats
+router.get('/chats', protect, isAdmin, async (req, res) => {
+    try {
+        // Aggregate to get unique chat pairs with last message
+        const chats = await Message.aggregate([
+            { $sort: { createdAt: -1 } },
+            {
+                $group: {
+                    _id: {
+                        $cond: {
+                            if: { $lt: ['$sender', '$receiver'] },
+                            then: { user1: '$sender', user2: '$receiver' },
+                            else: { user1: '$receiver', user2: '$sender' }
+                        }
+                    },
+                    lastMessage: { $first: '$text' },
+                    lastMessageAt: { $first: '$createdAt' },
+                    messageCount: { $sum: 1 }
+                }
+            },
+            { $sort: { lastMessageAt: -1 } },
+            { $limit: 100 }
+        ]);
+
+        // Populate user info
+        const populatedChats = await Promise.all(chats.map(async (chat) => {
+            const user1 = await User.findById(chat._id.user1).select('username fullName profileImage');
+            const user2 = await User.findById(chat._id.user2).select('username fullName profileImage');
+            return {
+                user1,
+                user2,
+                lastMessage: chat.lastMessage?.substring(0, 50) + (chat.lastMessage?.length > 50 ? '...' : ''),
+                lastMessageAt: chat.lastMessageAt,
+                messageCount: chat.messageCount
+            };
+        }));
+
+        res.json(populatedChats);
+    } catch (error) {
+        console.error('Get chats error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 module.exports = router;

@@ -1,4 +1,6 @@
 const cloudinary = require('../config/cloudinary');
+const User = require('../models/User');
+const { notifyUser } = require('../utils/pushService');
 
 // Helper: Check if user has an active unlimited plan
 const hasUnlimitedCoins = (user) => {
@@ -49,6 +51,15 @@ exports.getRecommendations = async (req, res) => {
     const excludedIds = new Set();
     excludedIds.add(req.user.id); // Exclude self
 
+    // Exclude users blocked by me
+    if (me.blockedUsers && me.blockedUsers.length > 0) {
+      me.blockedUsers.forEach(id => excludedIds.add(id.toString()));
+    }
+
+    // Exclude users who have blocked me
+    const usersWhoBlockedMe = await User.find({ blockedUsers: req.user.id }).select('_id');
+    usersWhoBlockedMe.forEach(u => excludedIds.add(u._id.toString()));
+
     interactions.forEach(inter => {
       if (inter.sender.toString() === req.user.id) {
         // Exclude anyone I liked, rejected, or chatting with
@@ -69,7 +80,8 @@ exports.getRecommendations = async (req, res) => {
     // For now, following requirements and current scale.
     const candidates = await User.find({
       _id: { $nin: Array.from(excludedIds) },
-      datingProfileComplete: true
+      datingProfileComplete: true,
+      isDatingProfileVisible: { $ne: false }
     }).select('-phoneNumber -email -coins -followers -following -blockedUsers');
 
     if (candidates.length === 0) {
@@ -208,6 +220,22 @@ exports.switchMatch = async (req, res) => {
     await user.save();
     await targetUser.save();
 
+    // Send push notification to both users
+    notifyUser(
+      targetUserId,
+      "It's a Vibe! 💚",
+      `You matched with ${user.fullName || 'someone'}!`,
+      { type: 'match', matchId: req.user.id },
+      'match'
+    );
+    notifyUser(
+      req.user.id,
+      "It's a Vibe! 💚",
+      `You matched with ${targetUser.fullName || 'someone'}!`,
+      { type: 'match', matchId: targetUserId },
+      'match'
+    );
+
     // Log the activity
     const { logActivity } = require('../utils/activityLogger');
     await logActivity({
@@ -314,7 +342,8 @@ exports.updateDatingProfile = async (req, res) => {
       datingBio,
       datingInterests,
       datingPhotos,
-      datingProfileComplete
+      datingProfileComplete,
+      isDatingProfileVisible
     } = req.body;
 
     // Upload photos to Cloudinary if they are base64
@@ -343,7 +372,6 @@ exports.updateDatingProfile = async (req, res) => {
     const updateData = {
       datingGender,
       datingLookingFor,
-      datingAge,
       datingHeight,
       datingHometown,
       datingCollege,
@@ -352,8 +380,18 @@ exports.updateDatingProfile = async (req, res) => {
       datingBio,
       datingInterests,
       datingPhotos: uploadedPhotos.length > 0 ? uploadedPhotos : datingPhotos,
-      datingProfileComplete: datingProfileComplete || true
+      datingProfileComplete: datingProfileComplete || true,
+      isDatingProfileVisible
     };
+
+    // Age can only be set once (Locked field)
+    if (datingAge && !currentUser.datingAge) {
+      updateData.datingAge = datingAge;
+      // Also sync to main profile age if not set
+      if (!currentUser.age) {
+        updateData.age = datingAge;
+      }
+    }
 
     // Set initial chat slots based on gender if profile is being completed for the first time
     const currentUser = await User.findById(req.user.id);

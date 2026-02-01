@@ -51,3 +51,25 @@ exports.blockUser = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+// @desc    Unblock a user
+// @route   POST /api/users/unblock
+exports.unblockUser = async (req, res) => {
+    try {
+        const { targetUserId } = req.body;
+        const userId = req.user.id;
+
+        if (!targetUserId) {
+            return res.status(400).json({ message: 'Target user is required' });
+        }
+
+        await User.findByIdAndUpdate(userId, {
+            $pull: { blockedUsers: targetUserId }
+        });
+
+        res.json({ success: true, message: 'User unblocked' });
+    } catch (error) {
+        console.error('unblockUser error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

@@ -6,7 +6,8 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .populate('followers', '_id')
-      .populate('following', '_id');
+      .populate('following', '_id')
+      .populate('blockedUsers', 'username fullName profileImage');
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -138,7 +139,10 @@ exports.updateProfile = async (req, res) => {
       user.username = username;
     }
 
-    user.fullName = fullName || user.fullName;
+    // Full Name can only be set once (immutable after first set)
+    if (fullName && !user.fullName) {
+      user.fullName = fullName;
+    }
 
     // Age can only be set once (immutable after first set)
     if (age && !user.age) {
@@ -161,12 +165,24 @@ exports.updateProfile = async (req, res) => {
     }
 
     await user.save();
-    res.json(user);
+
+    // Check for profile completion reward
+    let profileReward = null;
+    if (!user.profileRewardClaimed && user.fullName && user.username && user.profileImage) {
+      const { checkProfileReward } = require('./rewardController');
+      profileReward = await checkProfileReward(user._id);
+    }
+
+    res.json({
+      ...user.toObject(),
+      profileReward,
+    });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // @desc    Block User
 // @route   POST /api/users/:id/block
@@ -292,6 +308,7 @@ exports.getAllUsers = async (req, res) => {
 // @route   POST /api/users/profile/reset-dating
 exports.resetDatingProfile = async (req, res) => {
   try {
+    console.log(`[Dating] Resetting profile for user: ${req.user.id}`);
     const user = await User.findByIdAndUpdate(
       req.user.id,
       {

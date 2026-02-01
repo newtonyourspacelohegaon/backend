@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -24,13 +25,14 @@ const generateOTP = () => {
 exports.sendOtp = async (req, res) => {
   const { phoneNumber, email } = req.body;
 
-  if (!phoneNumber && !email) {
-    return res.status(400).json({ message: 'Phone number or email is required' });
+  if (phoneNumber) {
+    return res.status(400).json({ message: 'Phone login is temporarily disabled. Please use your email.' });
   }
 
-  if (email && !email.toLowerCase().endsWith('@adypu.edu.in')) {
-    return res.status(400).json({ message: 'Only @adypu.edu.in emails are allowed' });
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
   }
+
 
   const otp = generateOTP();
   const target = phoneNumber || email;
@@ -49,6 +51,7 @@ exports.sendOtp = async (req, res) => {
   } else {
     // In production, integrate Twilio/Fast2SMS here
     console.log(`[SMS MOCK] OTP for ${phoneNumber}: ${otp}`);
+    require('fs').appendFileSync(path.join(__dirname, '../otp.txt'), `[${new Date().toISOString()}] OTP for ${phoneNumber}: ${otp}\n`);
   }
 
   res.status(200).json({
@@ -93,9 +96,41 @@ exports.verifyOtp = async (req, res) => {
     let user = await User.findOne(query);
 
     let isNewUser = false;
+    let referralBonus = 0;
+
     if (!user) {
-      // Register new user
-      user = await User.create(phoneNumber ? { phoneNumber } : { email });
+      // Generate unique referral code for new user
+      const generateReferralCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 8; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+
+      // Check for referral code from request (passed during signup)
+      const { referralCode } = req.body;
+      let referredBy = null;
+
+      if (referralCode) {
+        const referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
+        if (referrer) {
+          referredBy = referrer._id;
+          // Grant bonus to referrer
+          referrer.coins += 100;
+          await referrer.save();
+          referralBonus = 100; // Will be added to new user
+        }
+      }
+
+      // Register new user with referral code
+      user = await User.create({
+        ...(phoneNumber ? { phoneNumber } : { email }),
+        referralCode: generateReferralCode(),
+        referredBy,
+        coins: 150 + referralBonus, // Base coins + referral bonus if applicable
+      });
       isNewUser = true;
     }
 
@@ -103,6 +138,7 @@ exports.verifyOtp = async (req, res) => {
       success: true,
       token: generateToken(user._id),
       isNewUser: isNewUser || !user.username, // Treat as new if profile not finished
+      referralBonus,
       user: {
         id: user._id,
         phoneNumber: user.phoneNumber,
@@ -110,7 +146,8 @@ exports.verifyOtp = async (req, res) => {
         username: user.username,
         fullName: user.fullName,
         profileImage: user.profileImage,
-        coins: user.coins
+        coins: user.coins,
+        referralCode: user.referralCode,
       },
     });
   } catch (error) {
@@ -118,6 +155,7 @@ exports.verifyOtp = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 
 // @desc    Send College Verification OTP

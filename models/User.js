@@ -118,6 +118,31 @@ const userSchema = new mongoose.Schema({
     sparse: true,
   },
 
+  isDatingProfileVisible: {
+    type: Boolean,
+    default: true,
+  },
+
+  // Gamification & Rewards
+  lastDailyReward: Date,
+  profileRewardClaimed: {
+    type: Boolean,
+    default: false,
+  },
+  firstChatRewardClaimed: {
+    type: Boolean,
+    default: false,
+  },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+
   createdAt: {
     type: Date,
     default: Date.now,

@@ -2,6 +2,7 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activityLogger');
 const { notifyUser } = require('../utils/pushService');
+const { checkFirstChatReward } = require('./rewardController');
 
 // @desc    Send a message
 // @route   POST /api/chat/send
@@ -22,6 +23,9 @@ exports.sendMessage = async (req, res) => {
 
     await newMessage.save();
 
+    // Check for first chat reward (async, don't wait)
+    checkFirstChatReward(senderId);
+
     // Send push notification to receiver
     const sender = await User.findById(senderId).select('fullName username');
     const senderName = sender?.fullName || sender?.username || 'Someone';
@@ -41,6 +45,7 @@ exports.sendMessage = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // @desc    Get messages between current user and another user
 // @route   GET /api/chat/:userId
