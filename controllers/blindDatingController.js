@@ -27,10 +27,25 @@ exports.joinQueue = async (req, res) => {
         }
 
         // Check if already in an active session
-        const activeSession = await BlindDateSession.findOne({
+        let activeSession = await BlindDateSession.findOne({
             $or: [{ user1: userId }, { user2: userId }],
             status: { $in: ['active', 'extended'] },
         });
+
+        if (activeSession) {
+            const now = new Date();
+            const abandonedThreshold = new Date(now.getTime() - 2 * 60 * 1000); // 2 min
+
+            // Auto-end if expired or abandoned
+            if (now > activeSession.expiresAt ||
+                (activeSession.lastActivity && activeSession.lastActivity < abandonedThreshold)) {
+                activeSession.status = 'ended';
+                activeSession.endReason = now > activeSession.expiresAt ? 'expired' : 'abandoned';
+                await activeSession.save();
+                console.log(`[JoinQueue] Auto-ended stale session: ${activeSession._id}`);
+                activeSession = null; // Clear so user can rejoin
+            }
+        }
 
         if (activeSession) {
             return res.status(400).json({

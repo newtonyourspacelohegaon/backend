@@ -83,13 +83,35 @@ exports.sendLike = async (req, res) => {
         const reciprocalLike = await Like.findOne({ sender: targetUserId, receiver: req.user.id });
 
         if (reciprocalLike) {
-            // Check chat slot availability
+            // Check chat slot availability - still a mutual match, just can't chat yet!
             if (user.activeChatCount >= user.chatSlots) {
-                return res.status(400).json({ message: 'They liked you too, but you have no available chat slots!' });
+                // Still deduct the like and mark as match pending slots
+                user.likes -= 1;
+                await user.save();
+
+                return res.json({
+                    success: true,
+                    likes: user.likes,
+                    isMatch: true,
+                    canChat: false,
+                    message: "💕 It's a match! They like you too! Get more chat slots to start vibing.",
+                    reason: 'your_slots_full'
+                });
             }
             const targetUser = await User.findById(targetUserId);
             if (targetUser.activeChatCount >= targetUser.chatSlots) {
-                return res.status(400).json({ message: 'They liked you too, but their chat slots are full!' });
+                // Still deduct the like and mark as match
+                user.likes -= 1;
+                await user.save();
+
+                return res.json({
+                    success: true,
+                    likes: user.likes,
+                    isMatch: true,
+                    canChat: false,
+                    message: "💕 It's a match! They like you too! They're popular - their chat slots are full right now.",
+                    reason: 'their_slots_full'
+                });
             }
 
             // Create mutual match
