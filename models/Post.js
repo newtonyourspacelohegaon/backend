@@ -6,9 +6,13 @@ const postSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  // New: Array of image URLs (supports multiple images)
+  images: [{
+    type: String
+  }],
+  // Legacy: Single image field for backward compat
   image: {
     type: String,
-    required: true,
   },
   caption: String,
   likes: [{
@@ -25,5 +29,21 @@ const postSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+
+// Virtual to always return images array (handles old posts with single image)
+postSchema.virtual('allImages').get(function () {
+  if (this.images && this.images.length > 0) {
+    return this.images;
+  }
+  // Fallback for old posts with single image
+  if (this.image) {
+    return [this.image];
+  }
+  return [];
+});
+
+// Ensure virtuals are included in JSON
+postSchema.set('toJSON', { virtuals: true });
+postSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('Post', postSchema);

@@ -33,17 +33,33 @@ exports.getPosts = async (req, res) => {
   }
 };
 
-// @desc    Create a Post
+// @desc    Create a Post (supports single or multiple images)
 // @route   POST /api/posts
 exports.createPost = async (req, res) => {
   try {
-    const { image, caption } = req.body;
+    const { image, images, caption } = req.body;
 
-    if (!image) return res.status(400).json({ message: 'Image is required' });
+    // Support both single image and images array
+    let imageArray = [];
+    if (images && Array.isArray(images) && images.length > 0) {
+      imageArray = images;
+    } else if (image) {
+      imageArray = [image];
+    }
+
+    if (imageArray.length === 0) {
+      return res.status(400).json({ message: 'At least one image is required' });
+    }
+
+    // Limit to 10 images max
+    if (imageArray.length > 10) {
+      return res.status(400).json({ message: 'Maximum 10 images per post' });
+    }
 
     const post = await Post.create({
       user: req.user.id,
-      image,
+      images: imageArray,
+      image: imageArray[0], // Keep first image in legacy field for old clients
       caption
     });
 
