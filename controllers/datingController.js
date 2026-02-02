@@ -369,6 +369,12 @@ exports.updateDatingProfile = async (req, res) => {
       }
     }
 
+    // Fetch current user first so we can check existing fields
+    const currentUser = await User.findById(req.user.id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     const updateData = {
       datingGender,
       datingLookingFor,
@@ -394,7 +400,6 @@ exports.updateDatingProfile = async (req, res) => {
     }
 
     // Set initial chat slots based on gender if profile is being completed for the first time
-    const currentUser = await User.findById(req.user.id);
     if (!currentUser.datingProfileComplete && (datingProfileComplete || true)) {
       // Only set if not already set (e.g. via purchase)
       if (!currentUser.chatSlots || currentUser.chatSlots === 0) {

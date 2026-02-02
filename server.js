@@ -72,6 +72,10 @@ mongoose
     } catch (idxErr) {
       console.error('⚠️ Index Sync Warning:', idxErr.message);
     }
+
+    // Start blind date session cleanup job
+    const { startCleanupJob } = require('./jobs/cleanupBlindSessions');
+    startCleanupJob();
   })
   .catch((err) => {
     console.error('❌ MongoDB Connection Error:', err);

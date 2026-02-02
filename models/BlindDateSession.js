@@ -50,6 +50,22 @@ const blindDateSessionSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    // Track last activity for abandoned session detection
+    lastActivity: {
+        type: Date,
+        default: Date.now,
+    },
+    // Who ended the session (if manually ended)
+    endedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    // Reason session ended
+    endReason: {
+        type: String,
+        enum: ['expired', 'abandoned', 'user_left', 'declined', 'mutual_chat', null],
+        default: null,
+    },
     // Store anonymous messages within the session
     messages: [{
         sender: {

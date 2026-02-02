@@ -61,6 +61,7 @@ exports.joinQueue = async (req, res) => {
                 user2: match.user,
                 startTime: new Date(),
                 expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
+                lastActivity: new Date(),
             });
             await session.save();
 
@@ -170,13 +171,18 @@ exports.getStatus = async (req, res) => {
             // Check if session has expired
             if (new Date() > session.expiresAt) {
                 session.status = 'ended';
+                session.endReason = 'expired';
                 await session.save();
                 return res.json({
                     status: 'ended',
                     sessionId: session._id,
+                    endReason: 'expired',
                     message: "Time's up!",
                 });
             }
+
+            // Check if partner ended the session
+            const partnerLeft = session.endedBy && session.endedBy.toString() !== userId;
 
             return res.json({
                 status: session.status,
@@ -184,6 +190,8 @@ exports.getStatus = async (req, res) => {
                 messages: session.messages,
                 extended: session.extended,
                 expiresAt: session.expiresAt,
+                endReason: session.endReason,
+                partnerLeft: partnerLeft,
             });
         }
 
@@ -235,12 +243,13 @@ exports.sendMessage = async (req, res) => {
             return res.status(400).json({ message: "Session has ended. Time's up!" });
         }
 
-        // Add message
+        // Add message and update lastActivity
         session.messages.push({
             sender: userId,
             text: text.trim(),
             createdAt: new Date(),
         });
+        session.lastActivity = new Date();
         await session.save();
 
         res.json({
@@ -458,6 +467,8 @@ exports.endSession = async (req, res) => {
         }
 
         session.status = 'ended';
+        session.endedBy = userId;
+        session.endReason = 'user_left';
         await session.save();
 
         // Also remove from queue if somehow still there
