@@ -333,6 +333,7 @@ router.delete('/posts/:id', protect, isAdmin, async (req, res) => {
         await Post.findByIdAndDelete(req.params.id);
 
         await logActivity({
+            userId: req.user.id,
             action: 'ADMIN_DELETED_POST',
             details: {
                 postId: post._id,
@@ -429,6 +430,7 @@ router.delete('/users/:id', protect, isAdmin, async (req, res) => {
         await Post.deleteMany({ user: req.params.id });
 
         await logActivity({
+            userId: req.user.id,
             action: 'ADMIN_DELETED_USER',
             details: {
                 deletedUserId: targetUser._id,
