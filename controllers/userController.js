@@ -139,13 +139,13 @@ exports.updateProfile = async (req, res) => {
       user.username = username;
     }
 
-    // Full Name can only be set once (immutable after first set)
-    if (fullName && !user.fullName) {
+    // Allow fullName to be updated
+    if (fullName) {
       user.fullName = fullName;
     }
 
-    // Age can only be set once (immutable after first set)
-    if (age && !user.age) {
+    // Allow age to be updated
+    if (age) {
       user.age = age;
       // Also sync to dating profile
       user.datingAge = age;

@@ -38,7 +38,7 @@ exports.getPosts = async (req, res) => {
 exports.createPost = async (req, res) => {
   try {
     const { image, caption } = req.body;
-    
+
     if (!image) return res.status(400).json({ message: 'Image is required' });
 
     const post = await Post.create({
@@ -153,6 +153,52 @@ exports.seedPosts = async (req, res) => {
     });
     res.json({ message: 'Seeded successfully', post });
   } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Toggle Bookmark/Save Post
+// @route   PUT /api/posts/:id/bookmark
+exports.toggleBookmark = async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const userId = req.user.id;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const user = await User.findById(userId);
+    const savedIds = user.savedPosts.map(id => id.toString());
+
+    if (savedIds.includes(postId)) {
+      // Remove from saved
+      user.savedPosts = user.savedPosts.filter(id => id.toString() !== postId);
+    } else {
+      // Add to saved
+      user.savedPosts.push(postId);
+    }
+
+    await user.save();
+    res.json({ saved: user.savedPosts.map(id => id.toString()).includes(postId), savedPosts: user.savedPosts });
+  } catch (error) {
+    console.error('Toggle Bookmark Error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get Saved/Bookmarked Posts
+// @route   GET /api/posts/saved
+exports.getSavedPosts = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate({
+      path: 'savedPosts',
+      populate: { path: 'user', select: 'username fullName profileImage' }
+    });
+
+    res.json(user.savedPosts || []);
+  } catch (error) {
+    console.error('Get Saved Posts Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
